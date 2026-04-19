@@ -852,23 +852,323 @@ Acceptance criteria:
 Implementation files:
 - `docs/RELEASE.md` - comprehensive release checklist and decision tree
 
-## Suggested Execution Order
+## P8: Orchestration Hardening and Release
 
-1. P6-1: Audit ReviewerAgent and fallback execution contracts
-2. P6-2: Build one end-to-end repository workflow fixture
-3. P6-3: Add an explicit workflow command surface
-4. P7-1: Add structured execution logs for workflow runs
-5. P7-2: Prepare a release checklist for the narrowed product surface
+### P8-1: Integrate ExecutionLogger into Orchestrator
+
+### Status
+- Owner: Codex
+- Started:
+- Target: current execution window D (immediate, before v1.0.0)
+- State: not started
+
+### Notes
+- ExecutionLogger is built and tested, but Orchestrator does not use it yet
+- Each workflow run should automatically generate a structured execution log
+- Logs should capture the real workflow state for release verification
+- This is a bridge between the logging infrastructure (P7-1) and actual orchestrator operation
+
+### Validation
+- `pytest tests/test_orchestrator_logging.py --tb=short -q`
+- Manual verification: run `smart workflow repo-plan` and check `artifacts/session/` for logs
+- Logs contain agent results matching actual execution
+
+### Problem
+- Orchestrator produces terminal output but no machine-readable run records
+- Release checklist requires logs but workflow doesn't generate them
+- No way to inspect failures or verify artifact decisions post-run
+
+### Tasks
+- Pass ExecutionLogger instance to SmartCLIOrchestrator.__init__
+- Record classifier results via execute_task_plan
+- Record orchestrator summary after workflow inference
+- Record agent execution for each phase completion
+- Record final artifacts and errors
+- Test orchestrator logging with fixture repository
+- Verify logs match actual terminal output
+
+### Acceptance criteria
+- Each workflow run generates exactly one execution log
+- Log file is in `artifacts/session/execution_<session_id>.json`
+- Log contains all agent results and artifact manifests
+- Log schema matches ExecutionLogger format
+- Terminal output remains unchanged (logging is transparent)
+- Logs are valid JSON and can be parsed
+
+### Suggested files
+- `src/agents/orchestrator.py` - add logging
+- `src/cli.py` - pass logger to orchestrator
+- `tests/test_orchestrator_logging.py` - new tests
+
+---
+
+### P8-2: Release v1.0.0 with Orchestrator Logging
+
+### Status
+- Owner: Codex
+- Started:
+- Target: current execution window D
+- State: not started
+
+### Notes
+- All P6-7 items complete with full test coverage
+- Release checklist exists and all boxes can be checked
+- Orchestrator logging will complete the observability requirement
+- This release freezes the narrowed product surface
+
+### Validation
+- Follow docs/RELEASE.md checklist completely
+- Run: `pytest tests/test_cli.py tests/test_workflow_command.py tests/test_repo_workflow_e2e.py tests/test_reviewer_contract.py tests/test_basic_fallback_contracts.py tests/test_execution_logs.py --tb=short -q`
+- Manual verification of workflows on fixture repo
+- Tag git commit as v1.0.0
+
+### Problem
+- Currently have tested code but no release artifacts
+- Version number is still 1.0.0 everywhere but not tagged
+- CHANGELOG not updated with v1.0.0 entry
+- README doesn't document explicit workflow commands
+
+### Tasks
+- Update CHANGELOG.md with v1.0.0 entry
+- Update README.md with workflow command examples
+- Verify all acceptance criteria in RELEASE.md
+- Create git tag v1.0.0
+- Document workflow examples in docs/WORKFLOWS.md
+- Add basic troubleshooting guide
+
+### Acceptance criteria
+- v1.0.0 tag exists in git
+- CHANGELOG.md reflects v1.0.0 release
+- README.md documents workflow commands
+- RELEASE.md checklist is fully completed
+- All 54+ tests pass without warnings
+
+### Suggested files
+- `CHANGELOG.md`
+- `README.md`
+- `docs/WORKFLOWS.md` (new)
+- `.git/refs/tags/v1.0.0` (tag)
+
+---
+
+## P9: Agent Capability Expansion
+
+### P9-1: Implement ModifierAgent real execution path
+
+### Status
+- Owner: Codex
+- Started:
+- Target: execution window E
+- State: not started
+
+### Notes
+- ModifierAgent currently has only fallback (no AI path)
+- Real path would implement intelligent code modification
+- Should follow same contract as ReviewerAgent: read-only on success, truthful about changes
+- This expands workflow from analyze→plan→test to analyze→plan→modify→test
+
+### Validation
+- `pytest tests/test_modifier_real_path.py --tb=short -q`
+- Integration test: workflow that includes modification phase
+- Verify modified files are correctly reported
+
+### Problem
+- Workflow is analyze-only or review-only; no modification capability
+- Modifier fallback just returns basic report, no real changes
+
+### Tasks
+- Define ModifierAgent real path (with AI client)
+- Implement code transformation logic
+- Add file modification with rollback on failure
+- Create test suite for real path
+- Add integration test with full workflow
+
+### Acceptance criteria
+- ModifierAgent has working real path with AI
+- Modified files are correctly tracked
+- Changes are rolled back on error
+- Full workflow pipeline works: analyze → modify → test → review
+
+### Suggested files
+- `src/agents/modifier_agent.py`
+- `tests/test_modifier_real_path.py`
+
+---
+
+### P9-2: Add parallel agent execution
+
+### Status
+- Owner: Codex
+- Started:
+- Target: execution window E
+- State: not started
+
+### Notes
+- Current orchestrator executes agents sequentially
+- Analyzer and Tester could run in parallel
+- Parallelization could reduce total workflow time by 30-50%
+- Should be transparent to CLI contract
+
+### Validation
+- `pytest tests/test_parallel_execution.py --tb=short -q`
+- Benchmark: sequential vs parallel execution time
+- Verify results are identical regardless of execution order
+
+### Problem
+- Sequential execution of agents is slower than necessary
+- No parallelization even when agents are independent
+
+### Tasks
+- Identify agent dependency graph
+- Implement parallel execution via asyncio.gather or concurrent.futures
+- Add execution timing to logs
+- Create performance comparison tests
+- Ensure execution logs show parallel structure
+
+### Acceptance criteria
+- Independent agents execute in parallel
+- Total workflow time is reduced by 20%+
+- Results are identical to sequential execution
+- Execution logs show parallel structure
+
+### Suggested files
+- `src/agents/parallel_orchestrator.py` or enhancement to orchestrator
+- `tests/test_parallel_execution.py`
+
+---
+
+### P9-3: Cost tracking and optimization
+
+### Status
+- Owner: Codex
+- Started:
+- Target: execution window F
+- State: not started
+
+### Notes
+- AI cost optimizer exists but is not fully integrated
+- No per-agent cost tracking in logs
+- No cost breakdown in workflow summary
+- Users don't see actual costs for their runs
+
+### Validation
+- `pytest tests/test_cost_tracking.py --tb=short -q`
+- Verify costs are recorded in execution logs
+- Cost summary appears in terminal output
+
+### Problem
+- Cost tracking is incomplete
+- No visibility into what each agent costs
+- Budget profiles exist but not actively used
+
+### Tasks
+- Record cost for each agent execution
+- Include cost in ExecutionLogger output_data
+- Display total cost in workflow summary
+- Add cost tracking to execution logs
+- Test with cost optimizer
+
+### Acceptance criteria
+- Each agent execution records its cost
+- Costs appear in execution logs
+- Terminal shows cost summary
+- Costs are accurate to API calls made
+
+### Suggested files
+- `src/core/cost_tracking.py` (enhancement)
+- `tests/test_cost_tracking.py`
+
+---
+
+## P10: Multi-Repository and Batch Workflows
+
+### P10-1: Batch workflow execution
+
+### Status
+- Owner: Codex
+- Started:
+- Target: execution window G
+- State: not started
+
+### Notes
+- Currently: one repository per workflow invocation
+- Future: analyze multiple repos in one session
+- Would require session management and result aggregation
+
+### Validation
+- `pytest tests/test_batch_workflows.py --tb=short -q`
+- Manual: `smart workflow repo-plan dir1/ dir2/ dir3/`
+
+### Problem
+- Each repository requires separate CLI invocation
+- No aggregated results across multiple repos
+
+### Tasks
+- Extend CLI to accept multiple targets
+- Aggregate execution logs across batch
+- Generate summary report
+- Manage session across multiple workflows
+
+### Acceptance criteria
+- CLI accepts multiple repository targets
+- One aggregated execution log created
+- Summary report shows results for all repos
+
+### Suggested files
+- `src/cli.py` (enhancement)
+- `src/core/batch_orchestrator.py`
+- `tests/test_batch_workflows.py`
+
+---
+
+## P11: Advanced Features
+
+### P11-1: Workflow templates and presets
+
+### Notes
+- Pre-configured workflows for common tasks
+- Example: `smart workflow security-audit`, `smart workflow performance-check`
+- Template system with variable substitution
+
+### P11-2: Interactive workflow builder
+
+### Notes
+- CLI UI for selecting agents and configuration
+- `smart workflow --interactive`
+- Walk user through pipeline selection
+
+### P11-3: Webhook integration for CI/CD
+
+### Notes
+- Trigger workflows from GitHub webhooks
+- Store results in artifacts for CI systems
+- Integration with GitHub Actions
+
+---
+
+## Suggested Execution Order (Updated)
+
+**Current Milestone (Window D - Immediate):**
+1. P8-1: Integrate ExecutionLogger into Orchestrator (3-5 days)
+2. P8-2: Release v1.0.0 (1-2 days)
+
+**Next Milestone (Window E - 2-3 weeks):**
+1. P9-1: Implement ModifierAgent real path (5-7 days)
+2. P9-2: Add parallel execution (3-5 days)
+3. P9-3: Cost tracking (2-3 days)
+
+**Future (Window F-G):**
+- P10-1: Batch workflows
+- P11-x: Advanced features
 
 ## Next Milestone
 
-The next milestone should include:
-- P6-1
-- P6-2
-- P6-3
+**After v1.0.0 release:**
+- Smart CLI v1.0.0 has explicit workflow, full test coverage, and observability
+- Releases on narrowed product surface with one stable repository workflow
+- Ready for user feedback and capability expansion
 
-Milestone result:
-- Smart CLI has one explicit, tested, end-to-end repository workflow.
+---
 
 ## Tracking Template
 

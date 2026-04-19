@@ -28,7 +28,7 @@ class SimpleEventLogger:
 class SmartCLIOrchestrator:
     """Clean orchestrator with smart task classification and adaptive pipeline."""
 
-    def __init__(self, ai_client=None, config_manager=None):
+    def __init__(self, ai_client=None, config_manager=None, execution_logger=None):
         self.ai_client = ai_client
         self.config_manager = config_manager
         
@@ -43,17 +43,22 @@ class SmartCLIOrchestrator:
             from ..core.task_classifier import get_task_classifier
             from ..core.terminal_ui import initialize_terminal_ui
             from ..core.intelligent_execution_planner import IntelligentExecutionPlanner
+            from ..core.execution_logger import ExecutionLogger
         except ImportError:
             from core.ai_cost_optimizer import get_cost_optimizer
             from core.task_classifier import get_task_classifier
             from core.terminal_ui import initialize_terminal_ui
             from core.intelligent_execution_planner import IntelligentExecutionPlanner
+            from core.execution_logger import ExecutionLogger
 
         self.cost_optimizer = get_cost_optimizer()
         self.task_classifier = get_task_classifier()
         self.execution_planner = IntelligentExecutionPlanner()
         self.session_cost = 0.0
         self.artifacts = {}
+        
+        # Initialize execution logger for workflow tracking
+        self.execution_logger = execution_logger or ExecutionLogger()
 
         # Use simple event logger instead of terminal UI to prevent panel spam
         self.ui = SimpleEventLogger()
@@ -392,13 +397,20 @@ class SmartCLIOrchestrator:
             "reviewer": "review",
             "metalearning": "metalearning",
         }
+        
+        # Record workflow initiation in execution logger
+        workflow_type = plan.get("workflow_type", "generic")
+        self.execution_logger.record_workflow_type(workflow_type)
+        
+        workflow_summary = plan.get("workflow_summary")
+        if workflow_summary:
+            self.execution_logger.record_orchestrator_summary(workflow_summary)
 
         # Start UI with Live display - disable for clean orchestrator output
         execution_start_time = time.time()
         
         # Clean orchestrator execution without complex UI
         console.print("🤖 [bold cyan]Orchestrator:[/bold cyan] Starting execution pipeline")
-        workflow_summary = plan.get("workflow_summary")
         if workflow_summary:
             self._display_workflow_summary(workflow_summary)
 
@@ -439,6 +451,20 @@ class SmartCLIOrchestrator:
                     results.append(result)
                     duration = time.time() - start_time
                     total_cost += 0.01  # Fallback cost estimate
+                    
+                    # Record agent execution in log
+                    if result:
+                        self.execution_logger.record_agent_execution(
+                            agent_name=agent_display,
+                            agent_type=agent_type,
+                            success=result.success,
+                            created_files=getattr(result, 'created_files', []) or [],
+                            modified_files=getattr(result, 'modified_files', []) or [],
+                            errors=getattr(result, 'errors', []) or [],
+                            warnings=getattr(result, 'warnings', []) or [],
+                            execution_time=duration,
+                            output_data=getattr(result, 'output_data', {}),
+                        )
 
                     # Generate and display artifacts
                     self._generate_phase_artifacts(agent_type, phase_name, result)
@@ -472,6 +498,8 @@ class SmartCLIOrchestrator:
                 except Exception as e:
                     console.print(f"❌ {agent_display} failed: {str(e)}")
                     console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] {phase_display_name} phase failed")
+                    # Record error in log
+                    self.execution_logger.record_error(f"{agent_type} execution failed: {str(e)}")
                     results.append(None)
                     if risk in ["critical", "high"]:
                         console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] Critical failure → stopping pipeline")
@@ -509,8 +537,15 @@ class SmartCLIOrchestrator:
         console.print("\n[bold]Artifacts saved to:[/bold]")
         console.print("  ./artifacts/ (phase manifests and any real agent outputs)")
         console.print()
+        
+        # Record final state and save execution log
+        workflow_success = success_count > 0
+        self.execution_logger.record_artifacts(self.artifacts)
+        self.execution_logger.finalize(success=workflow_success)
+        log_path = self.execution_logger.save_to_disk()
+        console.print(f"📋 [dim]Execution log saved to: {log_path}[/dim]")
 
-        return success_count > 0
+        return workflow_success
 
     def _generate_phase_artifacts(self, agent_type: str, phase_name: str, result):
         """Persist a truthful phase manifest instead of synthetic artifact files."""
