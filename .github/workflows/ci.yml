@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     
     steps:
     - name: Checkout code
@@ -31,17 +31,9 @@ jobs:
     - name: Add project to Python path
       run: echo "PYTHONPATH=${GITHUB_WORKSPACE}:${PYTHONPATH}" >> $GITHUB_ENV
     
-    - name: Run trusted core test suite
+    - name: Run full test suite
       run: |
-        python -m pytest \
-          tests/test_cli.py \
-          tests/test_config.py \
-          tests/test_basic.py \
-          tests/test_simple_ai_client.py \
-          tests/test_mode_surface.py \
-          tests/test_workflow_classifier.py \
-          tests/test_workflow_summary.py \
-          tests/test_workflow_acceptance.py \
+        python -m pytest tests/ \
           --cov=src \
           --cov-report=xml \
           --cov-report=term-missing \
