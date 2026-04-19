@@ -25,72 +25,28 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        # Install all required dependencies for Smart CLI
+        pip install -e .
         pip install pytest pytest-cov pytest-asyncio
-        pip install typer rich click
-        pip install aiohttp asyncio-throttle
-        pip install toml pydantic
-        pip install openai anthropic
-        pip install redis psycopg2-binary
-        pip install prometheus-client
-        pip install fastapi uvicorn
-        # Skip optional dependencies that might fail
     
     - name: Add project to Python path
       run: echo "PYTHONPATH=${GITHUB_WORKSPACE}:${PYTHONPATH}" >> $GITHUB_ENV
     
-    - name: Generate src coverage data
+    - name: Run trusted core test suite
       run: |
-        # First, ensure src/__init__.py has actual code to cover
-        echo "# Testing src module import and execution" > test_src_coverage.py
-        echo "import sys, os" >> test_src_coverage.py
-        echo "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))" >> test_src_coverage.py
-        echo "" >> test_src_coverage.py
-        echo "def test_src_module():" >> test_src_coverage.py
-        echo "    \"\"\"Test that actually executes src code.\"\"\"" >> test_src_coverage.py
-        echo "    # Import and execute src/__init__.py" >> test_src_coverage.py
-        echo "    try:" >> test_src_coverage.py
-        echo "        import src" >> test_src_coverage.py
-        echo "        # Execute version check if available" >> test_src_coverage.py
-        echo "        version = getattr(src, '__version__', 'unknown')" >> test_src_coverage.py
-        echo "        print(f'Version: {version}')" >> test_src_coverage.py
-        echo "        assert version is not None" >> test_src_coverage.py
-        echo "    except Exception as e:" >> test_src_coverage.py
-        echo "        print(f'Import succeeded but execution limited: {e}')" >> test_src_coverage.py
-        echo "        pass  # Don't fail, just ensure some code runs" >> test_src_coverage.py
-        echo "" >> test_src_coverage.py
-        echo "def test_basic():" >> test_src_coverage.py
-        echo "    \"\"\"Basic test to ensure pytest works.\"\"\"" >> test_src_coverage.py
-        echo "    assert True" >> test_src_coverage.py
-        
-        # Run this test with coverage
-        python -m pytest test_src_coverage.py -v --cov=src --cov-report=xml --cov-report=term-missing
-        
-    - name: Also run original tests
-      run: |
-        # Run original tests but don't fail CI if they have import issues
-        python -m pytest tests/test_basic_ci.py -v --cov=src --cov-append --cov-report=xml --cov-report=term-missing --tb=short || echo "Original tests completed with some skips/failures"
-    
-    - name: Debug coverage generation
-      run: |
-        echo "=== Coverage Debug Information ==="
-        echo "Current directory contents:"
-        ls -la
-        echo "Coverage files:"
-        find . -name "*.xml" -type f | head -10
-        echo "Coverage.xml content (if exists):"
-        if [ -f coverage.xml ]; then
-          echo "File size: $(wc -c < coverage.xml) bytes"
-          echo "File content:"
-          cat coverage.xml
-        else
-          echo "❌ coverage.xml not found"
-        fi
-        echo "=== Src directory structure ==="
-        find src -type f | head -20
-        echo "=== Test execution trace ==="
-        echo "Python path: $PYTHONPATH"
-    
+        python -m pytest \
+          tests/test_cli.py \
+          tests/test_config.py \
+          tests/test_basic.py \
+          tests/test_simple_ai_client.py \
+          tests/test_mode_surface.py \
+          tests/test_workflow_classifier.py \
+          tests/test_workflow_summary.py \
+          tests/test_workflow_acceptance.py \
+          --cov=src \
+          --cov-report=xml \
+          --cov-report=term-missing \
+          --tb=short
+
     - name: Upload coverage to Codecov (tokenless)
       if: matrix.python-version == '3.9'  
       uses: codecov/codecov-action@v4

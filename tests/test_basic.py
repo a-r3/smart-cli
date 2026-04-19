@@ -1,5 +1,6 @@
 """Basic tests for Smart CLI functionality."""
 
+import asyncio
 import pytest
 import tempfile
 import os
@@ -73,7 +74,7 @@ def test_ai_client_initialization():
         # Should be able to create client (even without API key)
         client = SimpleOpenRouterClient(config)
         assert client is not None
-        assert client.config_manager is config
+        assert client.config is config
 
 
 def test_smart_cli_initialization():
@@ -86,15 +87,16 @@ def test_smart_cli_initialization():
     assert smart_cli.debug is True
 
 
-@pytest.mark.asyncio
-async def test_smart_cli_async_init():
+def test_smart_cli_async_init():
     """Test Smart CLI async initialization."""
     from src.smart_cli import SmartCLI
     
     smart_cli = SmartCLI(debug=True)
     
     # Should be able to initialize (even if some components fail)
-    result = await smart_cli.initialize()
+    result = asyncio.run(smart_cli.initialize())
+    if smart_cli.ai_client and smart_cli.ai_client.session:
+        asyncio.run(smart_cli.ai_client.close_session())
     assert isinstance(result, bool)
 
 

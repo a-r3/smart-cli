@@ -96,6 +96,35 @@ class SmartCLI:
 
         self.debug = debug
 
+    def _show_missing_ai_configuration(self):
+        """Display actionable setup guidance when no AI provider is configured."""
+        console.print("❌ [red]No AI provider is configured.[/red]")
+        console.print(
+            "Set an API key before starting the interactive assistant.",
+            style="yellow",
+        )
+        console.print(
+            "Use one of these commands:",
+            style="cyan",
+        )
+        console.print("  smart config api-key sk-or-v1-your-key-here", style="dim")
+        console.print(
+            "  python -m src.cli config api-key sk-or-v1-your-key-here", style="dim"
+        )
+        console.print("  export OPENROUTER_API_KEY=sk-or-v1-your-key-here", style="dim")
+        console.print("  export ANTHROPIC_API_KEY=sk-ant-api03-your-key-here", style="dim")
+
+    async def shutdown(self):
+        """Clean up session and network resources."""
+        if self.session_manager.session_active:
+            await self.session_manager.end_session()
+
+        if self.ai_client:
+            try:
+                await self.ai_client.close_session()
+            except Exception:
+                pass
+
     async def initialize(self):
         """Initialize Smart CLI components with robust error handling."""
         initialization_steps = [
@@ -250,6 +279,10 @@ class SmartCLI:
         if not await self.initialize():
             return
 
+        if not self.ai_client:
+            self._show_missing_ai_configuration()
+            return
+
         await self.session_manager.start_session()
 
         # Welcome message handled by session_manager
@@ -258,52 +291,47 @@ class SmartCLI:
     async def interactive_loop(self):
         """Enhanced interactive loop with mode system support."""
         try:
-            # Try to activate enhanced mode system
-            from core.mode_system_activator import get_mode_system_activator
-            
-            mode_activator = get_mode_system_activator(self)
-            enhanced_mode_available = await mode_activator.activate_enhanced_mode_system()
-            
-        except Exception as e:
-            if self.debug:
-                console.print(f"⚠️ [dim yellow]Enhanced mode system not available: {e}[/dim yellow]")
-            enhanced_mode_available = False
-            mode_activator = None
-
-        # Fallback to original router if enhanced system not available
-        if not enhanced_mode_available:
-            from core.request_router import RequestRouter
-            request_router = RequestRouter(self)
-
-        while self.session_manager.session_active:
             try:
-                # Get user input
-                user_input = await self._get_user_input()
-                if user_input is None:  # EOF or exit
-                    break
+                # Try to activate enhanced mode system
+                from core.mode_system_activator import get_mode_system_activator
 
-                # Process with enhanced mode system or fallback to original
-                if enhanced_mode_available and mode_activator:
-                    should_continue = await mode_activator.process_request_with_modes(user_input)
-                else:
-                    should_continue = await request_router.process_request(user_input)
-                
-                if not should_continue:
-                    break
+                mode_activator = get_mode_system_activator(self)
+                enhanced_mode_available = await mode_activator.activate_enhanced_mode_system()
 
             except Exception as e:
-                console.print(f"❌ [red]Session error: {str(e)}[/red]")
                 if self.debug:
-                    console.print_exception()
-                continue
+                    console.print(f"⚠️ [dim yellow]Enhanced mode system not available: {e}[/dim yellow]")
+                enhanced_mode_available = False
+                mode_activator = None
 
-        # Cleanup when loop ends
-        await self.session_manager.end_session()
-        if self.ai_client:
-            try:
-                await self.ai_client.close_session()
-            except Exception:
-                pass
+            # Fallback to original router if enhanced system not available
+            if not enhanced_mode_available:
+                from core.request_router import RequestRouter
+                request_router = RequestRouter(self)
+
+            while self.session_manager.session_active:
+                try:
+                    # Get user input
+                    user_input = await self._get_user_input()
+                    if user_input is None:  # EOF or exit
+                        break
+
+                    # Process with enhanced mode system or fallback to original
+                    if enhanced_mode_available and mode_activator:
+                        should_continue = await mode_activator.process_request_with_modes(user_input)
+                    else:
+                        should_continue = await request_router.process_request(user_input)
+
+                    if not should_continue:
+                        break
+
+                except Exception as e:
+                    console.print(f"❌ [red]Session error: {str(e)}[/red]")
+                    if self.debug:
+                        console.print_exception()
+                    continue
+        finally:
+            await self.shutdown()
 
     # LEGACY METHODS - kept for compatibility, but replaced by RequestRouter
 

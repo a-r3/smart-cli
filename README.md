@@ -138,35 +138,16 @@ docker-compose logs -f
 <img src="https://raw.githubusercontent.com/raufA1/smart-cli/main/smart-cli-logo/icons/icon-20.png" alt="Smart CLI" width="16" height="16" style="vertical-align: middle;"> **Command Examples**
 
 ```bash
-# 🤖 Interactive AI Chat (DEFAULT)
-smart                              # Opens interactive AI chat terminal
-smart /help                        # Show chat commands
-smart /quit                        # Exit chat
+# 🤖 Interactive AI Chat (current default)
+smart
 
-# 💬 Quick AI Chat
-smart chat quick "Write a Python function to sort a list"
-
-# 🔧 System Management
-smart --help                       # Show all CLI commands
-smart health                       # System health check
-smart config --show               # Display configuration
-smart version                      # Version information
-
-# 🤖 AI Code Generation
-smart generate --help
-smart generate function --name "calculate_sum" --lang python
-
-# 🏗️ Project Management  
-smart init --help
-smart init project my-app --template python
-
-# 💰 Usage & Cost Analytics
-smart usage --period daily
-smart budget --set daily --amount 10.00
-
-# 🔍 Code Review
-smart review --help
-smart review code app.py --focus security
+# 🔧 Supported CLI surface
+smart --help
+smart --version
+smart version
+smart config show
+smart config api-key sk-or-v1-your-key-here
+smart config github-token ghp_your_token_here
 ```
 
 ### 🌐 Web Interface
@@ -181,135 +162,21 @@ After starting the API server, access:
 
 ### 🔧 System Management
 ```bash
-# System health check
-python -m src.cli health
-# ✅ Checks: Python env, config, database, Redis, AI services, dependencies
+# Run the interactive assistant
+python -m src.cli
+
+# Show help and version
+python -m src.cli --help
+python -m src.cli --version
+python -m src.cli version
 
 # Configuration management
-python -m src.cli config --show                    # Display all settings
-python -m src.cli config --set temperature --value 0.7
-python -m src.cli config --set default_model --value "anthropic/claude-3-sonnet-20240229"
-
-# Version and help
-python -m src.cli version                          # Show version info
-python -m src.cli --help                          # Command overview
+python -m src.cli config show
+python -m src.cli config api-key sk-or-v1-your-key-here
+python -m src.cli config github-token ghp_your_token_here
 ```
 
-### 💰 Usage & Cost Management
-```bash
-# Usage analytics
-python -m src.cli usage --period daily            # Daily usage stats
-python -m src.cli usage --period weekly           # Weekly breakdown
-python -m src.cli usage --period monthly          # Monthly summary
-python -m src.cli usage --export --format json    # Export usage data
-
-# Budget management (Smart CLI)
-./smart "cost status"                             # Show current usage and limits
-./smart "cost budget"                            # Show budget configuration
-./smart "cost set daily 15.00"                  # Set daily limit to $15
-./smart "cost set monthly 300.00"               # Set monthly limit to $300
-./smart "cost set request 2.00"                 # Set per-request limit to $2
-
-# Budget profiles (Quick setup)
-./smart "cost profile list"                     # Show all available profiles
-./smart "cost profile set student"              # Student: $2/day, $40/month
-./smart "cost profile set developer"            # Developer: $8/day, $180/month
-./smart "cost profile set freelancer"           # Freelancer: $15/day, $350/month
-./smart "cost profile set enterprise"           # Enterprise: $100/day, $2500/month
-
-# Cost optimization
-./smart "cost models"                           # Show model pricing
-./smart "cost optimize"                         # Get optimization suggestions
-./smart "cost configure interactive"            # Interactive budget setup
-```
-
-### 🤖 AI Code Generation
-```bash
-# Function generation
-python -m src.cli generate function --name "fibonacci" --lang python --desc "Calculate fibonacci sequence"
-python -m src.cli generate function --name "validate_email" --lang javascript --desc "Email validation"
-
-# Class generation
-python -m src.cli generate class --name "User" --lang python --desc "User management class with authentication"
-python -m src.cli generate class --name "Database" --lang java --desc "Database connection manager"
-
-# API generation
-python -m src.cli generate api --name "user-api" --framework fastapi --endpoints "users,auth,profile"
-python -m src.cli generate api --name "blog-api" --framework express --endpoints "posts,comments,tags"
-
-# Component generation
-python -m src.cli generate component --name "Header" --framework react --props "title,navigation"
-python -m src.cli generate component --name "LoginForm" --framework vue --props "onSubmit,validation"
-```
-
-### 🏗️ Project Initialization
-```bash
-# Python projects
-python -m src.cli init project my-python-app --template python     # Basic Python
-python -m src.cli init project my-fastapi-app --template fastapi   # FastAPI web app
-python -m src.cli init project my-django-app --template django     # Django project
-
-# JavaScript projects
-python -m src.cli init project my-node-app --template node         # Node.js backend
-python -m src.cli init project my-react-app --template react       # React frontend
-python -m src.cli init project my-vue-app --template vue           # Vue.js app
-python -m src.cli init project my-express-app --template express   # Express API
-
-# Other languages
-python -m src.cli init project my-go-app --template go             # Go application
-python -m src.cli init project my-rust-app --template rust         # Rust project
-python -m src.cli init project my-java-app --template spring       # Spring Boot
-```
-
-### 🔍 Code Review & Analysis
-```bash
-# File analysis
-python -m src.cli review code app.py --focus security             # Security scan
-python -m src.cli review code main.js --focus performance         # Performance analysis
-python -m src.cli review code utils.py --focus style              # Code style check
-
-# Project-wide analysis
-python -m src.cli review project . --focus general --tests        # Full project review
-python -m src.cli review project src/ --focus security --reports  # Security audit
-python -m src.cli review project . --focus performance --metrics  # Performance analysis
-
-# Advanced review options
-python -m src.cli review code app.py --fix-issues                 # Auto-fix issues
-python -m src.cli review code app.py --explain-issues             # Detailed explanations
-python -m src.cli review project . --generate-report --format pdf # Generate PDF report
-```
-
-### 📊 Monitoring & Analytics
-```bash
-# Real-time monitoring (requires API server)
-curl http://localhost:8000/health                 # Health check
-curl http://localhost:8000/metrics                # Prometheus metrics
-curl http://localhost:8000/usage/stats            # Usage statistics
-
-# Team management (Enterprise features)
-python -m src.cli team list                       # List team members
-python -m src.cli team invite user@company.com    # Invite team member
-python -m src.cli team roles --user john@company.com --role admin # Assign roles
-```
-
-### 🐳 Docker Operations
-```bash
-# Development mode
-docker-compose up smart-cli-dev                   # Start dev container
-docker-compose exec smart-cli-dev bash            # Enter dev container
-
-# Production deployment
-docker-compose up -d                              # Start all services
-docker-compose ps                                 # Check service status
-docker-compose logs -f smart-cli                  # View application logs
-docker-compose logs -f grafana                    # View monitoring logs
-docker-compose down                               # Stop all services
-
-# Service management
-docker-compose restart smart-cli                  # Restart main app
-docker-compose exec postgres psql -U smartcli smartcli # Database access
-docker-compose exec redis redis-cli               # Redis CLI access
-```
+Additional planned commands and broader product work are tracked in [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/BACKLOG.md](docs/BACKLOG.md).
 
 ## ⚙️ Configuration
 
@@ -496,35 +363,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🚧 Roadmap
 
-### Phase 1: Foundation ✅ COMPLETED
-- [x] Advanced CLI framework with Rich UI
-- [x] Multi-language project templates
-- [x] Layered configuration management
-- [x] Comprehensive health monitoring
+The execution roadmap now lives in [docs/ROADMAP.md](docs/ROADMAP.md).
+Primary product workflow notes live in [docs/WORKFLOWS.md](docs/WORKFLOWS.md).
 
-### Phase 2: AI Integration ✅ COMPLETED
-- [x] OpenRouter API full integration
-- [x] Multi-LLM support with intelligent fallbacks
-- [x] Advanced context management and caching
-- [x] Dynamic prompt optimization
-
-### Phase 3: Advanced Features ✅ COMPLETED
-- [x] 20+ specialized AI agent system
-- [x] Custom template engine
-- [x] Enterprise team collaboration
-- [x] Advanced usage analytics and reporting
-
-### Phase 4: Enterprise ✅ COMPLETED
-- [x] SSO integration (Google, Microsoft, SAML)
-- [x] Production Docker deployment
-- [x] Prometheus/Grafana monitoring stack
-- [x] Full compliance and audit features
-
-### Phase 5: Production ✅ DEPLOYED
-- [x] FastAPI web server with full REST API
-- [x] Multi-container orchestration
-- [x] Real-time performance monitoring
-- [x] Enterprise security hardening
+Current priority order:
+- Product truth alignment
+- Reliable interactive CLI core
+- Trusted tests and CI
+- Provider architecture cleanup
+- Mode-system simplification
 
 ## 💰 Smart Budget Management
 
