@@ -1,14 +1,26 @@
-"""Smart CLI Multi-Agent Orchestrator with Full Terminal Dashboard UI."""
+"""Smart CLI Multi-Agent Orchestrator."""
 
 import asyncio
-import json
-import os
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
-from rich.live import Live
+
+from .agent_dispatcher import dispatch_agent
+from .artifact_recorder import generate_phase_artifacts, record_meta_learning_manifest
+from .plan_builder import (
+    create_pipeline_steps as _create_pipeline_steps,
+    estimate_plan_cost as _estimate_plan_cost,
+    get_agent_task_description as _get_agent_task_description,
+    phase_key_for_agent as _phase_key_for_agent,
+)
+from .workflow_display import (
+    build_workflow_summary as _build_workflow_summary,
+    build_agent_result_summary as _build_agent_result_summary,
+    display_agent_results_summary as _display_agent_results_summary,
+    display_workflow_summary as _display_workflow_summary,
+    infer_workflow_type as _infer_workflow_type,
+)
 
 console = Console()
 
@@ -129,97 +141,27 @@ class SmartCLIOrchestrator:
         console.print()
 
     def _infer_workflow_type(self, user_request: str) -> str:
-        """Infer the primary workflow type for the request."""
-        text = user_request.lower()
-        repo_terms = ["repo", "repository", "codebase", "project", "layihə", "kod bazası"]
-        plan_terms = ["plan", "roadmap", "next steps", "implementation plan", "planla"]
-        implement_terms = ["implement", "build", "fix", "apply", "tətbiq et", "düzəlt", "yarat"]
-        understand_terms = ["analyze", "review", "understand", "inspect", "təhlil", "anla", "yoxla"]
-
-        has_repo = any(term in text for term in repo_terms)
-        has_plan = any(term in text for term in plan_terms)
-        has_implement = any(term in text for term in implement_terms)
-        has_understand = any(term in text for term in understand_terms)
-
-        if has_repo and has_understand and has_plan:
-            return "repo_understand_plan"
-        if has_repo and has_understand and has_implement:
-            return "repo_understand_implement"
-        if has_repo and has_understand:
-            return "repo_understand"
-        return "generic"
+        return _infer_workflow_type(user_request)
 
     def build_workflow_summary(self, plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Build a standardized workflow summary for downstream display."""
-        workflow_type = plan.get("workflow_type", "generic")
-        pipeline = plan.get("pipeline", [])
-        return {
-            "workflow_type": workflow_type,
-            "title": plan.get("title", "Smart Plan"),
-            "stages": pipeline,
-            "estimated_cost": plan.get("estimated_cost", 0.0),
-            "summary_lines": [
-                f"Workflow: {workflow_type}",
-                f"Pipeline: {' -> '.join(pipeline) if pipeline else 'none'}",
-                f"Estimated cost: ${plan.get('estimated_cost', 0.0):.3f}",
-            ],
-        }
+        return _build_workflow_summary(plan)
 
     def _display_workflow_summary(self, summary: Dict[str, Any]) -> None:
-        """Render a stable workflow summary in terminal output."""
-        console.print("🧭 [bold cyan]Workflow Summary[/bold cyan]")
-        for line in summary.get("summary_lines", []):
-            console.print(f"   - {line}")
+        _display_workflow_summary(summary, console)
 
     def build_agent_result_summary(
         self, agent_type: str, result: Optional[Any]
     ) -> Dict[str, str]:
-        """Build a stable user-facing summary for one agent result."""
-        phase_name = self._phase_key_for_agent(agent_type).title()
-        agent_display = self.active_agents.get(agent_type, f"{agent_type} Agent")
-
-        if result is None:
-            return {
-                "phase_name": phase_name,
-                "agent_display": agent_display,
-                "status_text": "no result recorded",
-                "icon": "❌",
-            }
-
-        status_parts = []
-        created_files = getattr(result, "created_files", []) or []
-        modified_files = getattr(result, "modified_files", []) or []
-        warnings = getattr(result, "warnings", []) or []
-        errors = getattr(result, "errors", []) or []
-
-        if created_files:
-            status_parts.append(f"created {len(created_files)} files")
-        if modified_files:
-            status_parts.append(f"modified {len(modified_files)} files")
-        if warnings:
-            status_parts.append(f"{len(warnings)} warnings")
-        if errors:
-            status_parts.append(f"{len(errors)} errors")
-
-        status_text = ", ".join(status_parts) if status_parts else "completed with no file changes"
-        icon = "✅" if getattr(result, "success", False) else "❌"
-        return {
-            "phase_name": phase_name,
-            "agent_display": agent_display,
-            "status_text": status_text,
-            "icon": icon,
-        }
+        return _build_agent_result_summary(
+            agent_type, result, self.active_agents, self._phase_key_for_agent
+        )
 
     def _display_agent_results_summary(
-        self, agent_results: List[tuple[str, Optional[Any]]]
+        self, agent_results: List[tuple]
     ) -> None:
-        """Render the standardized agent result summary block."""
-        console.print("📌 [bold cyan]Result Summary[/bold cyan]")
-        for agent_type, result in agent_results:
-            summary = self.build_agent_result_summary(agent_type, result)
-            console.print(
-                f"   - {summary['phase_name']} by {summary['agent_display']} → {summary['status_text']} {summary['icon']}"
-            )
+        _display_agent_results_summary(
+            agent_results, self.active_agents, self._phase_key_for_agent, console
+        )
 
     async def create_detailed_plan(self, user_request: str) -> Dict[str, Any]:
         """Create intelligent plan with advanced execution planning."""
@@ -313,38 +255,11 @@ class SmartCLIOrchestrator:
         console.print()  # Add spacing
         return plan
 
-    def _create_pipeline_steps(
-        self, pipeline: List[str], models: Dict[str, str], complexity, risk
-    ) -> List[Dict]:
-        """Create execution steps based on pipeline."""
-        steps = []
+    def _create_pipeline_steps(self, pipeline, models, complexity, risk):
+        return _create_pipeline_steps(pipeline, models, complexity, risk)
 
-        for i, agent_type in enumerate(pipeline, 1):
-            step = {
-                "id": f"step_{i}",
-                "agent": agent_type,
-                "action": f"{agent_type}_task",
-                "description": f"Smart {complexity.value} {agent_type}",
-                "model": models.get(agent_type, "llama-3-8b"),
-            }
-            steps.append(step)
-
-        return steps
-
-    def _estimate_plan_cost(self, pipeline: List[str], models: Dict[str, str]) -> float:
-        """Estimate total cost for execution plan."""
-        total_cost = 0.0
-
-        for agent_type in pipeline:
-            try:
-                _, estimated_cost = self.cost_optimizer.select_optimal_model(
-                    agent_type, f"task for {agent_type}", estimated_tokens=2000
-                )
-                total_cost += estimated_cost
-            except Exception:
-                total_cost += 0.02  # Default estimate
-
-        return total_cost
+    def _estimate_plan_cost(self, pipeline, models) -> float:
+        return _estimate_plan_cost(pipeline, self.cost_optimizer)
 
     async def execute_task_plan(
         self, plan: Dict[str, Any], original_request: str
@@ -362,30 +277,7 @@ class SmartCLIOrchestrator:
         return await self._execute_smart_pipeline(plan, original_request)
 
     def _record_meta_learning_manifest(self) -> None:
-        """Persist a truthful manifest for orchestrator-side meta-learning updates."""
-        artifacts_dir = Path("artifacts") / "metalearning"
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-
-        manifest_path = artifacts_dir / "phase_manifest.json"
-        manifest = {
-            "agent": "metalearning",
-            "phase": "metalearning",
-            "timestamp": time.time(),
-            "success": True,
-            "created_files": [],
-            "modified_files": [],
-            "warnings": [],
-            "errors": [],
-            "notes": [
-                "No standalone meta-learning output files are generated yet.",
-                "This manifest records the post-run learning step only.",
-            ],
-        }
-
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2)
-
-        self.artifacts["metalearning"] = [str(manifest_path)]
+        record_meta_learning_manifest(self.artifacts)
 
     async def _execute_smart_pipeline(
         self, plan: Dict[str, Any], original_request: str
@@ -557,31 +449,8 @@ class SmartCLIOrchestrator:
 
         return workflow_success
 
-    def _generate_phase_artifacts(self, agent_type: str, phase_name: str, result):
-        """Persist a truthful phase manifest instead of synthetic artifact files."""
-        artifacts_dir = Path("artifacts") / phase_name
-        artifacts_dir.mkdir(parents=True, exist_ok=True)
-
-        reported_artifacts = []
-        reported_artifacts.extend(getattr(result, "created_files", []) or [])
-        reported_artifacts.extend(getattr(result, "modified_files", []) or [])
-
-        manifest_path = artifacts_dir / "phase_manifest.json"
-        manifest = {
-            "agent": agent_type,
-            "phase": phase_name,
-            "timestamp": time.time(),
-            "success": getattr(result, "success", True),
-            "created_files": getattr(result, "created_files", []) or [],
-            "modified_files": getattr(result, "modified_files", []) or [],
-            "warnings": getattr(result, "warnings", []) or [],
-            "errors": getattr(result, "errors", []) or [],
-        }
-
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            json.dump(manifest, handle, indent=2)
-
-        self.artifacts[phase_name] = reported_artifacts + [str(manifest_path)]
+    def _generate_phase_artifacts(self, agent_type: str, phase_name: str, result) -> None:
+        generate_phase_artifacts(agent_type, phase_name, result, self.artifacts)
 
     async def _execute_agent_with_progress(self, agent_type: str, original_request: str, complexity: str, phase_name: str):
         """Execute an agent with minimal factual status output."""
@@ -598,119 +467,20 @@ class SmartCLIOrchestrator:
         return result
 
     def _get_agent_task_description(self, agent_type: str) -> str:
-        """Get descriptive task name for agent."""
-        descriptions = {
-            "architect": "System design",
-            "analyzer": "Code analysis",
-            "modifier": "Implementation", 
-            "tester": "Quality assurance",
-            "reviewer": "Final review",
-            "metalearning": "Pattern learning",
-        }
-        return descriptions.get(agent_type, f"{agent_type} processing")
+        return _get_agent_task_description(agent_type)
 
     async def delegate_to_agent(
         self, agent_type: str, target: str, description: str, action: str = ""
-    ) -> "AgentReport":
-        """Smart agent delegation with model optimization."""
-        from .base_agent import AgentReport
-
-        task_start_time = time.time()
-        actual_cost = 0.0
-
-        # Smart model selection (simplified for UI)
-        try:
-            complexity, risk = self.task_classifier.classify_task(description)
-            optimal_model, estimated_cost = self.cost_optimizer.select_optimal_model(
-                agent_type, description, estimated_tokens=2000
-            )
-
-            # Update AI client model
-            if hasattr(self.ai_client, "set_model"):
-                self.ai_client.set_model(optimal_model)
-
-            actual_cost = estimated_cost
-
-        except Exception as e:
-            pass  # Silently handle for cleaner UI
-
-        try:
-            # Execute agent with config manager
-            if agent_type == "architect":
-                from .architect_agent import ArchitectAgent
-
-                agent = ArchitectAgent(self.ai_client, self.config_manager)
-                result = await agent.execute(target, description)
-
-            elif agent_type == "analyzer":
-                from .analyzer_agent import AnalyzerAgent
-
-                agent = AnalyzerAgent(self.ai_client, self.config_manager)
-                result = await agent.execute(target, description)
-
-            elif agent_type == "modifier":
-                from .modifier_agent import ModifierAgent
-
-                agent = ModifierAgent(self.ai_client, self.config_manager)
-                result = await agent.execute(target, description)
-
-            elif agent_type == "tester":
-                from .tester_agent import TesterAgent
-
-                agent = TesterAgent(self.ai_client, self.config_manager)
-                result = await agent.execute(target, description)
-
-            elif agent_type == "reviewer":
-                from .reviewer_agent import ReviewerAgent
-
-                agent = ReviewerAgent(self.ai_client, self.config_manager)
-                result = await agent.execute(target, description)
-
-            else:
-                console.print(f"⚠️ [yellow]Unknown agent: {agent_type}[/yellow]")
-                return AgentReport(
-                    success=False,
-                    agent_name=f"Unknown Agent ({agent_type})",
-                    task_description=description,
-                    execution_time=0.0,
-                    created_files=[],
-                    modified_files=[],
-                    errors=[f"Unknown agent type: {agent_type}"],
-                    warnings=[],
-                    output_data={},
-                    next_recommendations=[],
-                )
-
-            # Record cost and display result
-            task_duration = time.time() - task_start_time
-            self.cost_optimizer.record_usage(actual_cost)
-            self.session_cost += actual_cost
-
-            await self._process_agent_result(result, actual_cost)
-            return result
-
-        except Exception as e:
-            error_msg = f"Agent delegation failed: {str(e)}"
-            console.print(f"❌ [red]{error_msg}[/red]")
-
-            return AgentReport(
-                success=False,
-                agent_name=f"{agent_type} Agent",
-                task_description=description,
-                execution_time=0.0,
-                created_files=[],
-                modified_files=[],
-                errors=[error_msg],
-                warnings=[],
-                output_data={},
-                next_recommendations=[],
-            )
-
-    async def _process_agent_result(self, result: "AgentReport", cost: float = 0.0):
-        """Process agent result (simplified for UI dashboard)."""
-        # Results are now handled by the UI system
-        # This method kept for compatibility but simplified
-        pass
+    ) -> Any:
+        _cost_ref = [self.session_cost]
+        result = await dispatch_agent(
+            agent_type, target, description,
+            self.ai_client, self.config_manager,
+            self.cost_optimizer, self.task_classifier,
+            _cost_ref,
+        )
+        self.session_cost = _cost_ref[0]
+        return result
 
     async def _execute_intelligent_pipeline(self, execution_plan: list, original_request: str, complexity, risk):
         """Execute pipeline using intelligent execution plan phases."""
@@ -731,15 +501,10 @@ class SmartCLIOrchestrator:
             console.print(f"\n🤖 [bold cyan]Orchestrator:[/bold cyan] Dispatching [{phase_name}]")
             console.print()
             
-            # Start phase timer
-            import time
             phase_start_time = time.time()
-            
             phase_results = []
 
             if phase.execution_mode.value == "parallel_safe":
-                # Execute agents in parallel
-                import asyncio
                 tasks = []
                 for agent in phase.agents:
                     task = self._execute_agent_with_progress(agent, original_request, complexity.value if hasattr(complexity, 'value') else str(complexity), f"Phase {phase.phase_number}")
@@ -820,16 +585,7 @@ class SmartCLIOrchestrator:
         return results
 
     def _phase_key_for_agent(self, agent_type: str) -> str:
-        """Map an agent type to the phase artifact key."""
-        phase_mapping = {
-            "analyzer": "analysis",
-            "architect": "architecture",
-            "modifier": "implementation",
-            "tester": "testing",
-            "reviewer": "review",
-            "metalearning": "metalearning",
-        }
-        return phase_mapping.get(agent_type, agent_type)
+        return _phase_key_for_agent(agent_type)
 
 
 # Legacy public name retained for compatibility.
