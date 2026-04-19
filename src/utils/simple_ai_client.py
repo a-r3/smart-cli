@@ -1,4 +1,4 @@
-"""Simple AI Client - Essential OpenRouter integration with intelligent caching."""
+"""Simple AI Client with provider-aware request handling."""
 
 import asyncio
 import json
@@ -27,11 +27,12 @@ class AIResponse:
 
 
 class SimpleOpenRouterClient:
-    """Minimal OpenRouter API client."""
+    """Minimal AI client with OpenRouter and Anthropic support."""
 
     def __init__(self, config_manager):
         self.config = config_manager
-        self.api_key = config_manager.get_config("openrouter_api_key") or config_manager.get_config("anthropic_api_key") 
+        self.provider = "openrouter"
+        self.api_key = config_manager.get_config("openrouter_api_key")
         self.base_url = "https://openrouter.ai/api/v1"
         self.session = None
         self.last_request_time = 0
@@ -47,6 +48,7 @@ class SimpleOpenRouterClient:
         if not self.api_key:
             self.api_key = config_manager.get_config("anthropic_api_key")
             if self.api_key:
+                self.provider = "anthropic"
                 self.base_url = "https://api.anthropic.com/v1"
                 self.current_model = "claude-3-sonnet-20240229"
 
@@ -77,6 +79,14 @@ class SimpleOpenRouterClient:
         """Get the currently selected model."""
         return self.current_model
 
+    def _normalize_model_name(self, model: str) -> str:
+        """Normalize provider-prefixed model names for direct provider APIs."""
+        if self.provider == "anthropic" and "/" in model:
+            provider_name, normalized_model = model.split("/", 1)
+            if provider_name == "anthropic":
+                return normalized_model
+        return model
+
     def _create_cache_context(
         self, model: str, messages: List[Message]
     ) -> Dict[str, Any]:
@@ -87,6 +97,90 @@ class SimpleOpenRouterClient:
             "has_system_message": any(msg.role == "system" for msg in messages),
             "total_length": sum(len(msg.content) for msg in messages),
         }
+
+    def _build_request_data(
+        self, selected_model: str, messages: List[Message]
+    ) -> Dict[str, Any]:
+        """Build provider-specific request payload."""
+        normalized_model = self._normalize_model_name(selected_model)
+
+        if self.provider == "anthropic":
+            system_messages = [
+                msg.content for msg in messages if msg.role == "system"
+            ]
+            chat_messages = [
+                {"role": msg.role, "content": msg.content}
+                for msg in messages
+                if msg.role != "system"
+            ]
+            data = {
+                "model": normalized_model,
+                "messages": chat_messages,
+                "max_tokens": 4000,
+            }
+            if system_messages:
+                data["system"] = "\n".join(system_messages)
+            return data
+
+        return {
+            "model": normalized_model,
+            "messages": [
+                {"role": msg.role, "content": msg.content} for msg in messages
+            ],
+            "temperature": 0.7,
+            "max_tokens": 4000,
+        }
+
+    def _build_headers(self) -> Dict[str, str]:
+        """Build provider-specific request headers."""
+        if self.provider == "anthropic":
+            return {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
+
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://smart-cli.dev",
+            "X-Title": "Smart CLI",
+        }
+
+    def _get_endpoint_path(self) -> str:
+        """Return the provider-specific API path."""
+        if self.provider == "anthropic":
+            return "/messages"
+        return "/chat/completions"
+
+    def _parse_response(
+        self, result: Dict[str, Any], selected_model: str
+    ) -> AIResponse:
+        """Parse provider-specific responses into a common shape."""
+        if self.provider == "anthropic":
+            content_blocks = result.get("content", [])
+            text_parts = [
+                block.get("text", "")
+                for block in content_blocks
+                if block.get("type") == "text"
+            ]
+            usage = result.get("usage", {})
+            return AIResponse(
+                content="".join(text_parts),
+                model=result.get("model", self._normalize_model_name(selected_model)),
+                usage=usage,
+            )
+
+        content = (
+            result.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        return AIResponse(
+            content=content,
+            model=result.get("model", selected_model),
+            usage=result.get("usage", {}),
+        )
 
     async def initialize(self):
         """Initialize HTTP session."""
@@ -144,22 +238,9 @@ class SimpleOpenRouterClient:
 
         self.last_request_time = time.time()
 
-        # Prepare request data
-        data = {
-            "model": selected_model,
-            "messages": [
-                {"role": msg.role, "content": msg.content} for msg in messages
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4000,
-        }
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://smart-cli.dev",
-            "X-Title": "Smart CLI",
-        }
+        data = self._build_request_data(selected_model, messages)
+        headers = self._build_headers()
+        endpoint_path = self._get_endpoint_path()
 
         # Retry logic
         last_exception = None
@@ -169,7 +250,7 @@ class SimpleOpenRouterClient:
                     total=60
                 )  # 60 second timeout for implementations
                 async with self.session.post(
-                    f"{self.base_url}/chat/completions",
+                    f"{self.base_url}{endpoint_path}",
                     json=data,
                     headers=headers,
                     timeout=timeout,
@@ -177,14 +258,10 @@ class SimpleOpenRouterClient:
 
                     if response.status == 200:
                         result = await response.json()
-
-                        content = (
-                            result.get("choices", [{}])[0]
-                            .get("message", {})
-                            .get("content", "")
-                        )
-                        model_used = result.get("model", selected_model)
-                        usage = result.get("usage", {})
+                        parsed_response = self._parse_response(result, selected_model)
+                        content = parsed_response.content
+                        model_used = parsed_response.model
+                        usage = parsed_response.usage
 
                         # Cache the response if enabled
                         if self.cache_enabled and self.cache and content:
@@ -204,9 +281,7 @@ class SimpleOpenRouterClient:
                                 # Cache errors shouldn't break the flow
                                 pass
 
-                        return AIResponse(
-                            content=content, model=model_used, usage=usage
-                        )
+                        return parsed_response
                     elif response.status == 429:  # Rate limit
                         retry_after = int(response.headers.get("retry-after", 5))
                         await asyncio.sleep(retry_after)
@@ -221,7 +296,7 @@ class SimpleOpenRouterClient:
                     else:
                         error_text = await response.text()
                         raise Exception(
-                            f"OpenRouter API error {response.status}: {error_text}"
+                            f"{self.provider.title()} API error {response.status}: {error_text}"
                         )
 
             except asyncio.TimeoutError:
