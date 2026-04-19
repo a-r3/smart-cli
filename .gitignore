@@ -158,6 +158,7 @@ safety-report.json
 .pytest_cache
 .toxtest-env/
 test-env/
+test_env/
 
 
 # Temporary test files created during CI
