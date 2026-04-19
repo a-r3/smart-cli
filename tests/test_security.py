@@ -274,7 +274,7 @@ class TestVulnerabilityAssessment:
         critical_packages = [
             'cryptography',
             'requests',
-            'pyyaml'
+            'yaml'
         ]
         
         for package in critical_packages:
