@@ -1,5 +1,61 @@
 # Smart CLI Workflows
 
+## v1.0.0: Explicit Repository Analysis Workflows
+
+Smart CLI v1.0.0 features explicit, first-class CLI commands for repository analysis workflows.
+
+## Available Commands
+
+### 1. Repository Plan
+
+```bash
+smart workflow repo-plan <target>
+```
+
+Analyze a repository and provide an implementation plan.
+
+**Pipeline:**
+- Analyzer → Architect → Tester → Reviewer
+
+**Output:**
+- Terminal summary
+- Execution log: `artifacts/session/execution_<session_id>.json`
+- Phase artifacts: `artifacts/<phase>/`
+
+---
+
+### 2. Repository Analysis  
+
+```bash
+smart workflow repo-analyze <target>
+```
+
+Quick repository analysis without planning.
+
+**Pipeline:**
+- Analyzer → Tester
+
+**Output:**
+- Terminal summary
+- Execution log
+- Phase artifacts
+
+---
+
+## Execution Logs
+
+Every workflow generates structured JSON logs with:
+- Session metadata
+- Classification results
+- Orchestrator summary
+- Agent execution records
+- Artifacts manifest
+- Completion status
+
+Location: `artifacts/session/execution_<session_id>.json`
+
+---
+
 ## Primary Product Workflow
 
 The current product wedge for Smart CLI is:
@@ -8,7 +64,7 @@ The current product wedge for Smart CLI is:
 
 This is the workflow that should be strongest, most testable, and easiest to demonstrate.
 
-## Why This Workflow
+### Why This Workflow
 
 This workflow fits the current codebase better than broad feature claims because Smart CLI already has:
 - repository-aware request classification
