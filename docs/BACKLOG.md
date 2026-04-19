@@ -618,6 +618,35 @@ Acceptance criteria:
 - fix-task summaries and manifests reflect real file changes
 - behavior is covered by focused tests
 
+### P5-6: Lock report helper contracts for analyzer-style agents
+
+### Status
+- Owner: Codex
+- Started: 2026-04-19
+- Target: after ModifierAgent reporting cleanup
+- State: done
+
+### Notes
+- Added focused coverage for `AnalyzerAgent`, `ArchitectAgent`, and `TesterAgent` report/document helpers.
+- Tests now verify that helper methods return file paths that actually exist on disk after execution.
+- This protects orchestrator manifests and summaries from drifting away from real report outputs.
+
+### Validation
+- `pytest tests/test_agent_report_contracts.py --tb=short -q`
+
+Problem:
+- Analyzer-style agents appeared to report created report/document files correctly, but the contract was not locked by tests.
+
+Tasks:
+- verify analyzer report helper writes a real file
+- verify architect documentation helper returns real files
+- verify tester report helper writes a real file
+- cover these contracts with focused tests
+
+Acceptance criteria:
+- report/document helpers return paths for files that exist
+- analyzer, architect, and tester helper contracts are covered by tests
+
 ## Suggested Execution Order
 
 1. P0-1: Unify CLI entrypoint
