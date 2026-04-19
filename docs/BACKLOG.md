@@ -12,13 +12,24 @@ Rules for using it:
 ## Current Focus
 
 Current milestone:
-- PQ: Post-v1.0.0 Quality Baseline (infrastructure health before feature work)
+- PS: Security and correctness fixes (critical findings from 2026-04-20 audit)
 
 Current next milestone after that:
-- P9-2: Add parallel agent execution
+- PC: Code quality cleanup (bare excepts, dual imports, AgentReport collision)
 
 Current execution window:
-- Window PQ: fix CI, packaging, and code structure debt before expanding features
+- Window PS: address P0 security risks before any feature work
+
+## Window PQ Status (as of 2026-04-20) — COMPLETE
+
+All five PQ items shipped:
+- PQ-1 ✅ CI runs all 457 tests across Python 3.9–3.12
+- PQ-2 ✅ requirements.txt removed
+- PQ-3 ✅ Base dependencies: 23 → 7 (16 unused packages removed)
+- PQ-4 ✅ Automated release pipeline (PyPI OIDC + GHCR Docker)
+- PQ-5 ✅ Python 3.12 added to CI matrix (merged with PQ-1)
+- PQ-6 ✅ orchestrator.py: 836 → 592 lines, 4 modules extracted
+- PQ-7 ✅ intelligent_execution_planner.py: 797 → 173 lines, 2 modules extracted
 
 ## P0: Product Truth Alignment
 
@@ -953,6 +964,213 @@ Implementation files:
 
 ---
 
+## PS: Security and Correctness Fixes
+
+Critical findings from the 2026-04-20 full-codebase audit. These block any
+further feature work — they represent real security vulnerabilities and broken
+runtime behaviour.
+
+---
+
+### PS-1: Remove hardcoded default master key
+
+### Status
+- Owner:
+- Started:
+- Target: Window PS
+- State: not started
+
+### Problem
+`src/utils/config.py:92` falls back to `"default-key-change-me"` when
+`SMART_CLI_MASTER_KEY` is not set. Any install that never sets this env var
+silently uses a known key to encrypt API credentials, making encryption
+meaningless.
+
+### Tasks
+- Remove the hardcoded fallback string entirely
+- Raise a clear `EnvironmentError` when `SMART_CLI_MASTER_KEY` is absent
+- Update `docs/RELEASE.md` and README to document the required env var
+- Add a test that confirms startup fails cleanly without the env var
+
+### Acceptance criteria
+- `SMART_CLI_MASTER_KEY` absent → explicit error, not silent fallback
+- No hardcoded key string anywhere in source
+
+### Validation
+- `pytest tests/test_config.py -q`
+
+---
+
+### PS-2: Replace pickle with JSON in cache layer
+
+### Status
+- Owner:
+- Started:
+- Target: Window PS
+- State: not started
+
+### Problem
+`src/utils/cache.py` uses `pickle.loads` and `pickle.dumps` for SQLite and
+Redis serialization (lines 148, 192, 247, 335, 353). Pickle deserialization of
+untrusted data is a known RCE vector — even if the cache is local today, the
+pattern is unsafe and blocks any future shared-cache use.
+
+### Tasks
+- Replace `pickle.dumps/loads` with `json.dumps/loads` (or `orjson` for performance)
+- Handle non-JSON-serializable types explicitly (e.g. custom objects → dict representation)
+- Remove `import pickle` from `cache.py`
+- Invalidate any existing pickle-format cache entries on upgrade (flush on format change)
+- Add a regression test that confirms the cache round-trips complex values without pickle
+
+### Acceptance criteria
+- `import pickle` absent from `cache.py`
+- All cache operations use JSON serialization
+- Existing tests pass; new round-trip test added
+
+### Validation
+- `pytest tests/test_cache.py -q` (or create if missing)
+
+---
+
+## PC: Code Quality and Correctness Cleanup
+
+Non-security correctness issues found in the 2026-04-20 audit. Lower urgency
+than PS but block reliable operation.
+
+---
+
+### PC-1: Replace 10 bare `except:` clauses with specific exceptions
+
+### Status
+- Owner:
+- Started:
+- Target: Window PC
+- State: not started
+
+### Problem
+Ten bare `except:` clauses silently swallow all exceptions including
+`KeyboardInterrupt` and `SystemExit`. Files: `enhanced_request_router.py` (×2),
+`request_router.py` (×2), `simple_git.py`, `context_manager.py` (×2),
+`ai_cache.py` (×2), `implementation_handler.py`.
+
+### Tasks
+- Replace each `except:` with the narrowest specific exception(s) that make sense
+- Where the original intent was "log and continue", use `except Exception as e:` with a log statement
+- Do not silently drop exceptions — at minimum log them at DEBUG level
+
+### Acceptance criteria
+- Zero bare `except:` clauses in `src/`
+- `grep -r "except:" src/` returns no matches
+
+### Validation
+- `python3 -m pytest tests/ -q`
+
+---
+
+### PC-2: Fix AgentReport name collision in base_agent.py
+
+### Status
+- Owner:
+- Started:
+- Target: Window PC
+- State: not started
+
+### Problem
+`src/agents/base_agent.py` imports `AgentReport` from `core.agent_task` (line 13),
+then immediately redefines a new `@dataclass` with the same name `AgentReport`
+(line 21). The local redefinition shadows the import. Any code that imports
+`AgentReport` from `base_agent` gets the local version, while code that imports
+from `core.agent_task` gets a different class. This silent divergence causes
+subtle type bugs.
+
+### Tasks
+- Decide which `AgentReport` is canonical (likely the dataclass in `base_agent.py`)
+- Remove the import of `AgentReport` from `core.agent_task` if it is unused
+- Or remove the local redefinition and use the imported one throughout
+- Confirm all agent tests pass after resolution
+
+### Acceptance criteria
+- `AgentReport` defined exactly once, referenced consistently across all agents
+- No `TypeError` when comparing agent report instances across import paths
+
+### Validation
+- `pytest tests/test_agent_report_contracts.py tests/test_modifier_contract.py -q`
+
+---
+
+### PC-3: Fix `_is_agent_completed` always returning False
+
+### Status
+- Owner:
+- Started:
+- Target: Window PC
+- State: not started
+
+### Problem
+`src/core/execution_safety.py:309` — `_is_agent_completed(agent_name)` always
+returns `False`. This means agent dependency checking is entirely non-functional:
+agents that should wait for a dependency to finish will always proceed immediately.
+
+### Tasks
+- Implement real completion tracking: record completed agent names in a set
+- Call the recording method at the right point in `SafeExecutionCoordinator`
+- Add a focused test that verifies an agent waits when its dependency is incomplete
+
+### Acceptance criteria
+- `_is_agent_completed` returns `True` after an agent has been marked done
+- Dependency blocking actually prevents premature agent execution in tests
+
+---
+
+### PC-4: Remove or implement stub CLI commands
+
+### Status
+- Owner:
+- Started:
+- Target: Window PC
+- State: not started
+
+### Problem
+`src/cli.py` registers `generate` and `review code` commands that do nothing
+(lines 369–402). They appear in `--help` output and mislead users about product
+capabilities.
+
+### Tasks
+- For each stub command: decide implement or remove
+- If removing: delete the Typer registration so it disappears from help
+- If implementing: wire to real functionality with a test
+- `UsageTracker` stub (lines 49–93) should either track real data or be removed
+
+### Acceptance criteria
+- Every command visible in `smart --help` does something real
+- No command raises `NotImplementedError` or silently returns nothing
+
+---
+
+### PC-5: Align README with actual capabilities
+
+### Status
+- Owner:
+- Started:
+- Target: Window PC
+- State: not started
+
+### Problem
+README advertises SSO, RBAC, FastAPI server, Prometheus metrics, Grafana
+integration, PostgreSQL replication — none of which exist in the codebase.
+This misleads contributors and evaluators.
+
+### Tasks
+- Audit README feature claims against actual `src/` implementation
+- Mark missing features as "planned" or remove them
+- Add an explicit "Current capabilities" section that matches the real CLI surface
+
+### Acceptance criteria
+- Every feature listed in README has a corresponding implementation in `src/`
+- Claims without implementation are clearly marked `[planned]` or removed
+
+---
+
 ## PQ: Post-v1.0.0 Quality Baseline
 
 These items were surfaced during a post-release repo audit (2026-04-20). They are infrastructure and packaging health items that must be addressed before the next feature milestone. None require product changes — all are internal quality gates.
@@ -1357,34 +1575,37 @@ v1.0.0 was tagged manually. There is no automated pipeline to publish to PyPI or
 
 ---
 
-## Suggested Execution Order (Updated)
+## Suggested Execution Order (Updated 2026-04-20)
 
-**Current Milestone (Window PQ — post-v1.0.0 quality baseline):**
-1. PQ-1: CI runs full test suite (1-2 hours) — **start here**
-2. PQ-2: Remove requirements.txt (30 min)
-3. PQ-3: Dependency audit — strip unused packages (1-2 days)
-4. PQ-4: Release/publish workflow — PyPI + Docker (half day)
-5. PQ-5: Python 3.12 in CI matrix (30 min)
+**Current Milestone (Window PS — security fixes):**
+1. PS-1: Remove hardcoded master key (2-3 hours) — **start here**
+2. PS-2: Replace pickle with JSON in cache (half day)
 
-**Next Milestone (Window E — agent capability):**
+**Next Milestone (Window PC — correctness cleanup):**
+1. PC-1: Replace 10 bare `except:` (2-3 hours)
+2. PC-2: Fix AgentReport name collision (1-2 hours)
+3. PC-3: Fix `_is_agent_completed` always False (2-3 hours)
+4. PC-4: Remove or implement stub CLI commands (half day)
+5. PC-5: Align README with actual capabilities (2-3 hours)
+
+**Window E (agent capability, after PC is done):**
 1. P9-2: Add parallel execution (3-5 days)
 2. P9-3: Cost tracking (2-3 days)
-3. PQ-6: Decompose orchestrator.py (3-5 days)
-4. PQ-7: Decompose intelligent_execution_planner.py (2-3 days)
 
-**Future (Window F-G):**
+**Window F:**
 - PQ-8: Expand test coverage to untested modules
 - P10-1: Batch workflows
-- P11-x: Advanced features
 
-## Next Milestone
+## State as of 2026-04-20
 
-**Post-v1.0.0 state (as of 2026-04-20):**
-- v1.0.0 is tagged and released
-- 63 tests pass on 8/36 test files (CI does not run full suite — PQ-1)
-- 55 dependencies declared, subset likely unused (PQ-3)
-- No automated PyPI/Docker release pipeline (PQ-4)
-- orchestrator.py is 836 lines and needs decomposition (PQ-6)
+PQ window complete. Current blockers before next feature work:
+- **PS-1**: Hardcoded encryption key in `src/utils/config.py:92`
+- **PS-2**: `pickle.loads` in `src/utils/cache.py` (4 call sites)
+- **PC-1**: 10 bare `except:` clauses across 6 files
+- **PC-2**: `AgentReport` defined twice with different content
+- **PC-3**: `_is_agent_completed` always returns `False` — dependency system broken
+- **PC-4**: `generate` and `review code` commands are stubs in help output
+- **PC-5**: README advertises SSO, RBAC, FastAPI, Prometheus — none implemented
 
 ---
 

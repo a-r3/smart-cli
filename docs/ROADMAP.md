@@ -12,16 +12,30 @@ It is intentionally pragmatic:
 Actionable task breakdown:
 - See [docs/BACKLOG.md](BACKLOG.md) for prioritized implementation items.
 
-## Current Reality (as of 2026-04-20, post-v1.0.0)
+## Current Reality (as of 2026-04-20, post-PQ window)
 
-v1.0.0 is released. Core product truth alignment work (P0–P8) is complete. The next risk is infrastructure decay:
+Window PQ is complete. Infrastructure is now healthy:
+- CI runs all 457 tests across Python 3.9–3.12 ✅
+- Base dependencies trimmed from 23 to 7 ✅
+- Automated PyPI + Docker release pipeline in place ✅
+- `orchestrator.py` decomposed: 836 → 592 lines + 4 extracted modules ✅
+- `intelligent_execution_planner.py` decomposed: 797 → 173 lines + 2 extracted modules ✅
 
-- CI runs only 8 of 36 test files — the majority of the test suite is never verified in automation.
-- `requirements.txt` is stale and contradicts `pyproject.toml`.
-- 55 base dependencies declared; estimated 10–15 have no active callers in `src/`.
-- No automated PyPI or Docker release pipeline — v1.0.0 was published manually.
-- `orchestrator.py` (836 lines) and `intelligent_execution_planner.py` (797 lines) need decomposition before new agent capabilities land on top of them.
-- 21 of 64 source modules have no dedicated test file.
+A full codebase audit (2026-04-20) uncovered new blockers:
+
+**Security (PS — must fix before next release):**
+- `src/utils/config.py:92` — hardcoded fallback encryption key `"default-key-change-me"`
+- `src/utils/cache.py` — `pickle.loads` at 4 call sites (deserialization attack vector)
+
+**Correctness (PC — must fix before feature work):**
+- 10 bare `except:` clauses across 6 files — silently swallow all exceptions
+- `AgentReport` defined twice with different content (`base_agent.py` vs `core/agent_task.py`)
+- `_is_agent_completed` always returns `False` — dependency checking is non-functional
+- `generate` and `review code` CLI commands are empty stubs visible in `--help`
+- README advertises SSO, RBAC, FastAPI, Prometheus, Grafana — none implemented in `src/`
+
+**Deferred (Window F+):**
+- 21 of 64 source modules still have no dedicated test file
 
 ## Product Goal
 
@@ -201,32 +215,33 @@ Exit criteria:
 Priority:
 - Medium
 
-## Recommended Sequence (post-v1.0.0)
+## Recommended Sequence (post-PQ)
 
-Phases 1–8 are complete. Current priority stack:
+1. **PS: Security fixes** — master key, pickle → must ship before next release tag
+2. **PC: Correctness cleanup** — bare excepts, AgentReport, stub commands, README
+3. **P9: Agent Capability Expansion** — parallel execution, cost tracking
+4. **PQ-8: Test coverage** — 21 untested modules
+5. **P10/P11: Advanced features**
 
-1. **PQ: Post-v1.0.0 Quality Baseline** — CI, packaging, deps, release pipeline (see BACKLOG PQ-1 through PQ-5)
-2. **P9: Agent Capability Expansion** — parallel execution, cost tracking (P9-2, P9-3)
-3. **PQ refactor wave** — orchestrator decomposition, test coverage expansion (PQ-6 through PQ-8)
-4. **P10: Multi-Repo and Batch Workflows**
-5. **P11: Advanced Features**
+## Suggested Execution Plan
 
-## Suggested Execution Plan (post-v1.0.0)
+### Window PS (immediate — days)
+- PS-1: Remove hardcoded master key
+- PS-2: Replace pickle with JSON in cache
 
-### Window PQ (now — ~1 week)
-- PQ-1: CI runs full test suite + Python 3.12 matrix
-- PQ-2: Remove requirements.txt
-- PQ-3: Dependency audit
-- PQ-4: Release/publish workflow (PyPI + Docker)
+### Window PC (days — 1 week)
+- PC-1: 10 bare `except:` → specific exceptions
+- PC-2: AgentReport name collision fix
+- PC-3: `_is_agent_completed` implementation
+- PC-4: Remove/implement stub CLI commands
+- PC-5: README reality alignment
 
-### Window E (weeks 2–4)
+### Window E (1–3 weeks)
 - P9-2: Parallel agent execution
 - P9-3: Cost tracking integration
-- PQ-6: Decompose orchestrator.py
-- PQ-7: Decompose intelligent_execution_planner.py
 
-### Window F (weeks 5–8)
-- PQ-8: Expand test coverage to all untested modules
+### Window F (3–6 weeks)
+- PQ-8: Test coverage for 21 untested modules
 - P10-1: Batch workflow execution
 
 ### Window G+
