@@ -152,6 +152,25 @@ class EnhancedRequestRouter:
 
         return True
 
+    def _enrich_plan_with_classification(
+        self, plan: Dict[str, Any], classification: ClassificationResult
+    ) -> Dict[str, Any]:
+        """Attach stable workflow and classification metadata to a plan."""
+        if "context_hints" not in plan:
+            plan["context_hints"] = classification.context_hints
+        plan["confidence"] = classification.confidence
+        plan["reasoning"] = classification.reasoning
+        plan["suggested_action"] = classification.suggested_action
+
+        workflow_target = classification.context_hints.get("workflow_target")
+        workflow_stage = classification.context_hints.get("workflow_stage")
+        if workflow_target:
+            plan["workflow_target"] = workflow_target
+        if workflow_stage:
+            plan["workflow_stage"] = workflow_stage
+
+        return plan
+
     async def _process_command(self, user_input: str) -> bool:
         """Process special commands."""
         return await self.command_handler.handle_command(user_input)
@@ -178,12 +197,7 @@ class EnhancedRequestRouter:
         try:
             # Create and execute plan with enhanced context
             plan = await self.orchestrator.create_detailed_plan(user_input)
-
-            # Add classification insights to plan
-            if "context_hints" not in plan:
-                plan["context_hints"] = classification.context_hints
-            plan["confidence"] = classification.confidence
-            plan["reasoning"] = classification.reasoning
+            plan = self._enrich_plan_with_classification(plan, classification)
 
             success = await self.orchestrator.execute_task_plan(plan, user_input)
 
@@ -273,7 +287,7 @@ class EnhancedRequestRouter:
                     f"Analyze: {user_input}"
                 )
                 plan["analysis_mode"] = True
-                plan["context_hints"] = classification.context_hints
+                plan = self._enrich_plan_with_classification(plan, classification)
 
                 return await self.orchestrator.execute_task_plan(plan, user_input)
             except Exception as e:

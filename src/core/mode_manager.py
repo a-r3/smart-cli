@@ -12,6 +12,9 @@ from rich.console import Console
 
 console = Console()
 
+PUBLIC_MODES = {"smart", "code", "analysis"}
+EXPERIMENTAL_MODES = {"architect", "learning", "fast", "orchestrator"}
+
 class SmartMode(Enum):
     """Smart CLI operational modes."""
     
@@ -121,6 +124,30 @@ class SmartModeManager:
         # Initialize mode configurations
         self.mode_configs = self._initialize_default_configs()
         self._load_project_config()
+
+    @staticmethod
+    def parse_mode_string(mode_name: str) -> SmartMode:
+        """Parse a mode string and fall back to smart mode."""
+        try:
+            return SmartMode(mode_name.lower())
+        except (AttributeError, ValueError):
+            return SmartMode.SMART
+
+    def get_public_modes(self) -> List[SmartMode]:
+        """Return the stable public modes."""
+        return [mode for mode in SmartMode if mode.value in PUBLIC_MODES]
+
+    def get_experimental_modes(self) -> List[SmartMode]:
+        """Return the experimental modes."""
+        return [mode for mode in SmartMode if mode.value in EXPERIMENTAL_MODES]
+
+    def is_public_mode(self, mode: SmartMode) -> bool:
+        """Return whether a mode is part of the public stable surface."""
+        return mode.value in PUBLIC_MODES
+
+    def is_experimental_mode(self, mode: SmartMode) -> bool:
+        """Return whether a mode is experimental."""
+        return mode.value in EXPERIMENTAL_MODES
     
     def _initialize_default_configs(self) -> Dict[SmartMode, ModeConfig]:
         """Initialize default configurations for all modes."""
@@ -238,6 +265,11 @@ class SmartModeManager:
         # Switch mode
         old_mode = self.current_mode
         self.current_mode = new_mode
+
+        if self.is_experimental_mode(new_mode):
+            console.print(
+                f"⚠️ [yellow]{new_mode.value} is experimental and may change.[/yellow]"
+            )
         
         # Remember the switch
         await self.memory.remember_for_mode(
@@ -272,20 +304,17 @@ class SmartModeManager:
         # Architecture indicators
         arch_patterns = ["design", "architecture", "plan", "structure", "dizayn", "quruluş"]
         if any(pattern in input_lower for pattern in arch_patterns):
-            if self.current_mode != SmartMode.ARCHITECT:
-                return "architect"
+            return None
         
         # Learning indicators
         learn_patterns = ["explain", "how", "what", "learn", "izah", "necə", "nədir", "öyrət"]
         if any(pattern in input_lower for pattern in learn_patterns):
-            if self.current_mode != SmartMode.LEARNING:
-                return "learning"
+            return None
         
         # Quick command indicators
         quick_patterns = ["git", "ls", "cd", "npm", "pip", "quick", "fast"]
         if any(pattern in input_lower for pattern in quick_patterns):
-            if self.current_mode != SmartMode.FAST:
-                return "fast"
+            return None
         
         return None
     
@@ -333,7 +362,10 @@ class SmartModeManager:
             "permissions": current_config.permissions,
             "tools_count": len(current_config.allowed_tools),
             "history_count": len(self.mode_history),
-            "auto_approve": current_config.auto_approve
+            "auto_approve": current_config.auto_approve,
+            "is_public": self.is_public_mode(self.current_mode),
+            "experimental_modes": [mode.value for mode in self.get_experimental_modes()],
+            "public_modes": [mode.value for mode in self.get_public_modes()],
         }
     
     async def auto_switch_if_beneficial(self, user_input: str, context: Dict) -> bool:
@@ -358,3 +390,6 @@ def get_mode_manager(config_manager=None) -> SmartModeManager:
     if _mode_manager is None:
         _mode_manager = SmartModeManager(config_manager)
     return _mode_manager
+
+
+ModeManager = SmartModeManager

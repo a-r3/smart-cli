@@ -2,7 +2,20 @@
 
 ## Overview
 
-The Smart CLI Enhanced Mode System represents a revolutionary approach to AI-assisted development, providing specialized operational modes that adapt to different development contexts and workflows. This system combines intelligent auto-detection with explicit mode control, offering unprecedented flexibility and power.
+The mode system is available in the repository, but only part of it should be treated as stable user-facing surface right now.
+
+Stable modes:
+- `smart`
+- `code`
+- `analysis`
+
+Experimental modes:
+- `architect`
+- `learning`
+- `fast`
+- `orchestrator`
+
+Experimental modes may change behavior, naming, or availability as the core product matures.
 
 ## 🎭 Architecture
 
@@ -35,6 +48,8 @@ The Enhanced Mode System integrates seamlessly with existing Smart CLI architect
 - **Progressive Enhancement**: Optional activation with intelligent defaults
 
 ## 🎯 Operational Modes
+
+### Stable Public Modes
 
 ### 1. Smart Mode (Default)
 - **Purpose**: Intelligent auto-detection and adaptive processing
@@ -77,6 +92,8 @@ smart > /mode analysis
 🔍 Analysis Mode Activated - read-only deep analysis
 🛡️ Security analysis included
 ```
+
+### Experimental Modes
 
 ### 4. Architect Mode
 - **Purpose**: High-level system design and architecture planning
@@ -147,6 +164,9 @@ smart > /mode orchestrator
 # Switch to specific mode
 /mode code
 /mode analysis [reason]
+
+# Experimental modes are still switchable, but should be treated as unstable
+/mode architect
 
 # Quick switch to previous mode
 /switch

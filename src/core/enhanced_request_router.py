@@ -132,11 +132,18 @@ class EnhancedRequestRouter:
     async def _handle_mode_command(self, args: list):
         """Handle /mode command."""
         if not args:
-            console.print("🎭 [bold blue]Mövcud Mode-lər:[/bold blue]")
-            for mode in SmartMode:
+            console.print("🎭 [bold blue]Stable mode-lər:[/bold blue]")
+            for mode in self.mode_manager.get_public_modes():
                 config = self.mode_manager.mode_configs[mode]
                 current_indicator = "✓" if mode == self.mode_manager.current_mode else " "
                 console.print(f"{current_indicator} [cyan]{mode.value}[/cyan]: {config.description}")
+            experimental_modes = self.mode_manager.get_experimental_modes()
+            if experimental_modes:
+                console.print("🧪 [bold yellow]Experimental mode-lər:[/bold yellow]")
+                for mode in experimental_modes:
+                    config = self.mode_manager.mode_configs[mode]
+                    current_indicator = "✓" if mode == self.mode_manager.current_mode else " "
+                    console.print(f"{current_indicator} [yellow]{mode.value}[/yellow]: {config.description}")
             return
         
         target_mode = args[0]
@@ -155,13 +162,17 @@ class EnhancedRequestRouter:
         console.print("📊 [bold green]Mode Status:[/bold green]")
         console.print(f"🎯 Hazırkı: [cyan]{status['current_mode']}[/cyan]")
         console.print(f"📝 Təsvir: {status['description']}")
+        console.print(f"🧭 Səth: {'stable' if status['is_public'] else 'experimental'}")
         console.print(f"🤖 Model: {status['preferred_model'] or 'Default'}")
         console.print(f"💾 Context: {status['context_size']} token")
         console.print(f"⚙️ Alətlər: {status['tools_count']} mövcud")
         
         if status['previous_mode']:
             console.print(f"⬅️ Əvvəlki: {status['previous_mode']}")
-        
+
+        console.print(f"✅ Stable mode-lər: {', '.join(status['public_modes'])}")
+        console.print(f"🧪 Experimental mode-lər: {', '.join(status['experimental_modes'])}")
+
         context_summary = self.context_manager.get_context_summary()
         console.print(f"📋 Context: {len(context_summary['active_modes'])} aktiv mode")
     
@@ -218,6 +229,25 @@ class EnhancedRequestRouter:
             if self.debug:
                 console.print_exception()
             return True
+
+    def _enrich_plan_with_classification(
+        self, plan: Dict[str, Any], classification: ClassificationResult
+    ) -> Dict[str, Any]:
+        """Attach stable workflow and classification metadata to a plan."""
+        if "context_hints" not in plan:
+            plan["context_hints"] = classification.context_hints
+        plan["confidence"] = classification.confidence
+        plan["reasoning"] = classification.reasoning
+        plan["suggested_action"] = classification.suggested_action
+
+        workflow_target = classification.context_hints.get("workflow_target")
+        workflow_stage = classification.context_hints.get("workflow_stage")
+        if workflow_target:
+            plan["workflow_target"] = workflow_target
+        if workflow_stage:
+            plan["workflow_stage"] = workflow_stage
+
+        return plan
     
     async def _route_to_processor(self, classification: ClassificationResult, user_input: str, context: Dict) -> bool:
         """Route request based on intelligent classification."""
@@ -375,9 +405,7 @@ class EnhancedRequestRouter:
         
         try:
             plan = await self.orchestrator.create_detailed_plan(user_input)
-            plan["context_hints"] = classification.context_hints
-            plan["confidence"] = classification.confidence
-            plan["reasoning"] = classification.reasoning
+            plan = self._enrich_plan_with_classification(plan, classification)
 
             success = await self.orchestrator.execute_task_plan(plan, user_input)
             if not success:
@@ -418,7 +446,7 @@ class EnhancedRequestRouter:
             try:
                 plan = await self.orchestrator.create_detailed_plan(f"Analiz et: {user_input}")
                 plan["analysis_mode"] = True
-                plan["context_hints"] = classification.context_hints
+                plan = self._enrich_plan_with_classification(plan, classification)
 
                 return await self.orchestrator.execute_task_plan(plan, user_input)
             except Exception as e:

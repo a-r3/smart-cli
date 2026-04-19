@@ -276,15 +276,15 @@ class IntelligentRequestClassifier:
 
         # Pre-check for obvious conversation patterns (high priority)
         conversation_patterns = [
-            "salam",
-            "hello",
-            "hi",
-            "necəsən",
-            "how are you",
-            "weather",
-            "what's the weather",
+            r"\bsalam\b",
+            r"\bhello\b",
+            r"\bhi\b",
+            r"\bnecəsən\b",
+            r"\bhow are you\b",
+            r"\bweather\b",
+            r"\bwhat's the weather\b",
         ]
-        if any(pattern in user_lower for pattern in conversation_patterns):
+        if any(re.search(pattern, user_lower) for pattern in conversation_patterns):
             request_type_name = "conversation"
             confidence = 0.9
             reasoning = ["Greeting or general conversation"]
@@ -499,6 +499,10 @@ class IntelligentRequestClassifier:
 
     def _get_suggested_action(self, request_type: RequestType, user_input: str) -> str:
         """Get suggested action for the request type."""
+        workflow_action = self._detect_workflow_action(user_input.lower())
+        if workflow_action:
+            return workflow_action
+
         actions = {
             RequestType.COMMAND: "Execute system command",
             RequestType.DEVELOPMENT: "Route to orchestrator for multi-agent development",
@@ -508,6 +512,60 @@ class IntelligentRequestClassifier:
             RequestType.ANALYSIS: "Perform code/file analysis",
         }
         return actions.get(request_type, "Process as general request")
+
+    def _detect_workflow_action(self, text: str) -> Optional[str]:
+        """Detect higher-level product workflows from free text."""
+        repo_terms = [
+            "repo",
+            "repository",
+            "codebase",
+            "project",
+            "layihə",
+            "repozu",
+            "kod bazası",
+        ]
+        understanding_terms = [
+            "understand",
+            "analyze",
+            "review",
+            "inspect",
+            "təhlil",
+            "anla",
+            "yoxla",
+        ]
+        planning_terms = [
+            "plan",
+            "roadmap",
+            "next steps",
+            "implementation plan",
+            "planla",
+            "növbəti addım",
+        ]
+        implementation_terms = [
+            "implement",
+            "build",
+            "fix",
+            "apply",
+            "tətbiq et",
+            "düzəlt",
+            "yarat",
+        ]
+
+        has_repo_context = any(term in text for term in repo_terms)
+        has_understanding = any(term in text for term in understanding_terms)
+        has_planning = any(term in text for term in planning_terms)
+        has_implementation = any(term in text for term in implementation_terms)
+
+        if has_repo_context and has_understanding and has_planning:
+            return "Run repo understand -> plan workflow"
+
+        if has_repo_context and has_understanding and has_implementation:
+            return "Run repo understand -> implement workflow"
+
+        if has_repo_context and has_understanding:
+            return "Run repo understanding workflow"
+
+        return None
 
     def _extract_context_hints(self, text: str) -> Dict[str, any]:
         """Extract context hints from the text."""
@@ -529,6 +587,18 @@ class IntelligentRequestClassifier:
         urgent_words = ["urgent", "asap", "quickly", "fast", "tez", "cəld"]
         if any(word in text for word in urgent_words):
             hints["urgency"] = "high"
+
+        repo_terms = ["repo", "repository", "codebase", "project", "layihə", "kod bazası"]
+        if any(term in text for term in repo_terms):
+            hints["workflow_target"] = "repository"
+
+        if hints.get("workflow_target") == "repository":
+            if any(term in text for term in ["plan", "roadmap", "next steps", "planla"]):
+                hints["workflow_stage"] = "plan"
+            elif any(term in text for term in ["implement", "fix", "build", "tətbiq et", "düzəlt"]):
+                hints["workflow_stage"] = "implement"
+            elif any(term in text for term in ["analyze", "review", "understand", "təhlil", "anla", "yoxla"]):
+                hints["workflow_stage"] = "understand"
 
         return hints
 

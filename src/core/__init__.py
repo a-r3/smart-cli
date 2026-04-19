@@ -7,7 +7,7 @@ from .session_manager import SessionManager
 
 # Enhanced mode system modules
 try:
-    from .mode_manager import SmartModeManager, SmartMode, get_mode_manager
+    from .mode_manager import ModeManager, SmartModeManager, SmartMode, get_mode_manager
     from .context_manager import SmartContextManager, get_context_manager
     from .enhanced_request_router import EnhancedRequestRouter
     from .mode_config_manager import SmartModeConfigManager, get_mode_config_manager
@@ -37,6 +37,7 @@ __all__ = [
 if MODE_SYSTEM_AVAILABLE:
     __all__.extend([
         'SmartModeManager',
+        'ModeManager',
         'SmartMode', 
         'get_mode_manager',
         'SmartContextManager',
