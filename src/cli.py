@@ -105,6 +105,60 @@ def version_command():
     show_version()
 
 
+@app.command("workflow")
+def workflow_command(
+    command: str = typer.Argument(
+        ..., help="Workflow command: repo-plan, repo-analyze"
+    ),
+    target: str = typer.Argument(
+        ".", help="Target repository path or file (default: current directory)"
+    ),
+):
+    """🧭 Execute explicit repository workflows."""
+    console.print(format_section_header("Smart Workflow", "🧭"))
+
+    if command == "repo-plan":
+        request = (
+            f"analyze this repository at {target} and give me an implementation plan"
+        )
+    elif command == "repo-analyze":
+        request = f"analyze this repository at {target}"
+    else:
+        console.print(
+            f"❌ [red]Unknown workflow command: {command}[/red]"
+        )
+        console.print(
+            "💡 Available workflows: repo-plan, repo-analyze"
+        )
+        return
+
+    console.print(f"📍 Target: {target}")
+    console.print(f"🎯 Request: {request}\n")
+
+    try:
+        asyncio.run(execute_workflow_request(request, debug=False))
+    except KeyboardInterrupt:
+        console.print("\n👋 [yellow]Workflow cancelled[/yellow]")
+    except Exception as e:
+        console.print(f"❌ [red]Workflow error: {e}[/red]")
+
+
+async def execute_workflow_request(request: str, debug: bool = False):
+    """Execute a workflow request through the Smart CLI system."""
+    smart_cli = SmartCLI(debug=debug)
+    await smart_cli.initialize()
+
+    # Use the internal request processing to handle the workflow
+    try:
+        from src.core.request_router import RequestRouter
+    except ImportError:
+        from core.request_router import RequestRouter
+
+    request_router = RequestRouter(smart_cli)
+    await request_router.process_request(request)
+
+
+
 def show_version():
     """Show Smart CLI version information."""
     from rich.table import Table
