@@ -12,14 +12,16 @@ It is intentionally pragmatic:
 Actionable task breakdown:
 - See [docs/BACKLOG.md](BACKLOG.md) for prioritized implementation items.
 
-## Current Reality
+## Current Reality (as of 2026-04-20, post-v1.0.0)
 
-Facts observed in the codebase:
-- The repository presents itself as an enterprise-grade AI CLI platform, but the actual CLI surface is narrower and inconsistent.
-- `src/cli.py` contains overlapping callback flows and mismatched startup behavior.
-- Tests and implementation are out of sync, especially around CLI commands and mode-system integration.
-- CI currently uses synthetic coverage generation instead of relying only on real, trusted tests.
-- Core building blocks do exist: config management, interactive shell flow, AI client, handlers, and a mode system foundation.
+v1.0.0 is released. Core product truth alignment work (P0–P8) is complete. The next risk is infrastructure decay:
+
+- CI runs only 8 of 36 test files — the majority of the test suite is never verified in automation.
+- `requirements.txt` is stale and contradicts `pyproject.toml`.
+- 55 base dependencies declared; estimated 10–15 have no active callers in `src/`.
+- No automated PyPI or Docker release pipeline — v1.0.0 was published manually.
+- `orchestrator.py` (836 lines) and `intelligent_execution_planner.py` (797 lines) need decomposition before new agent capabilities land on top of them.
+- 21 of 64 source modules have no dedicated test file.
 
 ## Product Goal
 
@@ -199,41 +201,36 @@ Exit criteria:
 Priority:
 - Medium
 
-## Recommended Sequence
+## Recommended Sequence (post-v1.0.0)
 
-1. Phase 1: Product Truth Alignment
-2. Phase 2: Reliable Core
-3. Phase 3: Test and CI Credibility
-4. Phase 4: Provider Architecture
-5. Phase 5: Mode System Simplification
-6. Phase 6: Workflow Differentiation
-7. Phase 7: Agents and Orchestration
-8. Phase 8: Observability and Release Discipline
+Phases 1–8 are complete. Current priority stack:
 
-## Suggested 6-Week Execution Plan
+1. **PQ: Post-v1.0.0 Quality Baseline** — CI, packaging, deps, release pipeline (see BACKLOG PQ-1 through PQ-5)
+2. **P9: Agent Capability Expansion** — parallel execution, cost tracking (P9-2, P9-3)
+3. **PQ refactor wave** — orchestrator decomposition, test coverage expansion (PQ-6 through PQ-8)
+4. **P10: Multi-Repo and Batch Workflows**
+5. **P11: Advanced Features**
 
-### Weeks 1-2
-- Finish Phase 1
-- Start Phase 2
-- Remove CLI ambiguity
-- Align tests with the real contract
+## Suggested Execution Plan (post-v1.0.0)
 
-### Weeks 3-4
-- Finish Phase 2
-- Finish Phase 3
-- Make CI honest and repeatable
-- Lock down first-run UX
+### Window PQ (now — ~1 week)
+- PQ-1: CI runs full test suite + Python 3.12 matrix
+- PQ-2: Remove requirements.txt
+- PQ-3: Dependency audit
+- PQ-4: Release/publish workflow (PyPI + Docker)
 
-### Week 5
-- Start Phase 4
-- Start Phase 5
-- Separate provider logic
-- reduce mode surface to tested behavior
+### Window E (weeks 2–4)
+- P9-2: Parallel agent execution
+- P9-3: Cost tracking integration
+- PQ-6: Decompose orchestrator.py
+- PQ-7: Decompose intelligent_execution_planner.py
 
-### Week 6
-- Start Phase 6
-- Choose one developer workflow as the product wedge
-- write acceptance tests around that workflow
+### Window F (weeks 5–8)
+- PQ-8: Expand test coverage to all untested modules
+- P10-1: Batch workflow execution
+
+### Window G+
+- P11-x: Workflow templates, interactive builder, webhook integration
 
 ## Backlog Candidates
 

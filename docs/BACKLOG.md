@@ -12,13 +12,13 @@ Rules for using it:
 ## Current Focus
 
 Current milestone:
-- Phase 9: Agent Capability Expansion
+- PQ: Post-v1.0.0 Quality Baseline (infrastructure health before feature work)
 
 Current next milestone after that:
 - P9-2: Add parallel agent execution
 
 Current execution window:
-- Window E: expand real agent execution beyond analysis and review
+- Window PQ: fix CI, packaging, and code structure debt before expanding features
 
 ## P0: Product Truth Alignment
 
@@ -953,6 +953,202 @@ Implementation files:
 
 ---
 
+## PQ: Post-v1.0.0 Quality Baseline
+
+These items were surfaced during a post-release repo audit (2026-04-20). They are infrastructure and packaging health items that must be addressed before the next feature milestone. None require product changes — all are internal quality gates.
+
+---
+
+### PQ-1: CI runs full test suite
+
+### Status
+- Owner:
+- Started:
+- Target: Window PQ
+- State: not started
+
+### Problem
+`.github/workflows/ci.yml` explicitly lists only 8 of 36 test files. CI passes while the majority of the test suite is never exercised in automation.
+
+### Tasks
+- Replace hand-picked test file list with `pytest tests/` or a glob
+- Verify all 36 test files pass in CI
+- Add 3.12 to Python version matrix (see PQ-5)
+
+### Acceptance criteria
+- CI runs all tests in `tests/`
+- No previously passing CI run hides a failing test
+- Matrix covers 3.9, 3.10, 3.11, 3.12
+
+### Validation
+- CI green on all matrix versions with `pytest tests/ -q`
+
+---
+
+### PQ-2: Remove requirements.txt
+
+### Status
+- Owner:
+- Started:
+- Target: Window PQ
+- State: not started
+
+### Problem
+`requirements.txt` lists only `requests` and `sqlite3>=3.0.0` (a built-in). It is out of sync with `pyproject.toml` and misleads tooling (Dependabot, Dockerfile) into using an incomplete dependency list.
+
+### Tasks
+- Delete `requirements.txt`
+- Update `Dockerfile` to install from `pyproject.toml` only (`pip install -e .`)
+- Update `MANIFEST.in` to remove the `include requirements.txt` line
+- Verify Dockerfile still builds
+
+### Acceptance criteria
+- No `requirements.txt` in the repository
+- `Dockerfile` installs dependencies via pyproject.toml only
+
+---
+
+### PQ-3: Dependency audit — remove unused packages
+
+### Status
+- Owner:
+- Started:
+- Target: Window PQ
+- State: not started
+
+### Problem
+55 packages are declared as base dependencies in `pyproject.toml`. Several (`fastapi`, `uvicorn`, `networkx`, `beautifulsoup4`, `prometheus-client`) appear to have no active callers in `src/`. Unused deps increase install time, attack surface, and Dependabot noise.
+
+### Tasks
+- For each suspected-unused package, grep `src/` for import statements
+- Remove packages with zero callers
+- Move packages that are only used in tests to `[project.optional-dependencies.test]`
+- Re-run test suite after each removal to catch hidden usages
+
+### Acceptance criteria
+- Every package in base dependencies has at least one `import` in `src/`
+- Test-only packages are in the test extras, not base
+
+### Validation
+- `pip install -e .` installs a smaller set
+- `pytest tests/ -q` still passes
+
+---
+
+### PQ-4: Release/publish workflow (PyPI + Docker)
+
+### Status
+- Owner:
+- Started:
+- Target: Window PQ
+- State: not started
+
+### Problem
+v1.0.0 was tagged manually. There is no automated pipeline to publish to PyPI or build/push a Docker image. Future releases require manual steps that are undocumented and error-prone.
+
+### Tasks
+- Add `.github/workflows/release.yml` triggered on `push: tags: ['v*']`
+- Build wheel with `python -m build`
+- Publish to PyPI via `pypa/gh-action-pypi-publish`
+- Build and push Docker image to GHCR
+- Add `PYPI_API_TOKEN` and `GHCR_TOKEN` as required secrets (document in `docs/RELEASE.md`)
+
+### Acceptance criteria
+- Pushing a tag like `v1.1.0` triggers publish to PyPI and Docker automatically
+- Release pipeline is documented in `docs/RELEASE.md`
+
+---
+
+### PQ-5: Python 3.12 in CI matrix
+
+### Status
+- Owner:
+- Started:
+- Target: Window PQ (fold into PQ-1)
+- State: not started
+
+### Problem
+`pyproject.toml` declares `python_requires = ">=3.9"` and implicitly supports 3.12, but CI matrix only tests 3.9, 3.10, 3.11.
+
+### Tasks
+- Add `3.12` to the `python-version` matrix in `ci.yml`
+- Fix any 3.12-specific deprecation warnings
+
+### Acceptance criteria
+- CI matrix includes `["3.9", "3.10", "3.11", "3.12"]`
+- All tests pass on 3.12
+
+---
+
+### PQ-6: Decompose orchestrator.py (836 lines)
+
+### Status
+- Owner:
+- Started:
+- Target: Window E
+- State: not started
+
+### Problem
+`src/agents/orchestrator.py` is 836 lines with 29 functions. It handles pipeline routing, sequential execution, intelligent pipeline, artifact recording, workflow summary display, and meta-learning — too many responsibilities in one file.
+
+### Tasks
+- Identify and extract: pipeline routing logic → `src/agents/pipeline_router.py`
+- Extract: artifact recording and manifest writing → `src/agents/artifact_recorder.py`
+- Extract: workflow summary display → `src/agents/workflow_display.py`
+- Keep orchestrator as thin coordinator
+- All existing orchestrator tests must pass unchanged after decomposition
+
+### Acceptance criteria
+- `orchestrator.py` is under 300 lines
+- Each extracted module has focused responsibility
+- No test regressions
+
+---
+
+### PQ-7: Decompose intelligent_execution_planner.py (797 lines)
+
+### Status
+- Owner:
+- Started:
+- Target: Window E
+- State: not started
+
+### Problem
+`src/core/intelligent_execution_planner.py` is 797 lines with 19 functions. Similar decomposition needed as orchestrator.
+
+### Tasks
+- Separate: plan generation, plan validation, and plan execution phases into distinct helpers
+- Keep `IntelligentExecutionPlanner` as a thin facade
+- Cover extracted helpers with focused tests
+
+### Acceptance criteria
+- `intelligent_execution_planner.py` is under 300 lines
+- Plan generation, validation, and execution are independently testable
+
+---
+
+### PQ-8: Expand test coverage to untested modules
+
+### Status
+- Owner:
+- Started:
+- Target: Window F
+- State: not started
+
+### Problem
+64 source modules, 36 test files. 21 modules have no dedicated test file. Coverage ratio is 1 test per 1.8 source modules — insufficient for a v1.0.0+ product.
+
+### Tasks
+- List all `src/**/*.py` modules without a corresponding `tests/test_*.py`
+- For each untested module, add a minimal contract test (public API, happy path, one error path)
+- Priority order: `core/` modules first, then `agents/`, then `utils/`
+
+### Acceptance criteria
+- Every module in `src/` has at least one test
+- `pytest tests/ --co -q` shows coverage for all modules
+
+---
+
 ## P9: Agent Capability Expansion
 
 ### P9-1: Implement ModifierAgent real execution path
@@ -1163,25 +1359,32 @@ Implementation files:
 
 ## Suggested Execution Order (Updated)
 
-**Current Milestone (Window D - Immediate):**
-1. P8-1: Integrate ExecutionLogger into Orchestrator (3-5 days)
-2. P8-2: Release v1.0.0 (1-2 days)
+**Current Milestone (Window PQ — post-v1.0.0 quality baseline):**
+1. PQ-1: CI runs full test suite (1-2 hours) — **start here**
+2. PQ-2: Remove requirements.txt (30 min)
+3. PQ-3: Dependency audit — strip unused packages (1-2 days)
+4. PQ-4: Release/publish workflow — PyPI + Docker (half day)
+5. PQ-5: Python 3.12 in CI matrix (30 min)
 
-**Next Milestone (Window E - 2-3 weeks):**
-1. P9-1: Implement ModifierAgent real path (5-7 days)
-2. P9-2: Add parallel execution (3-5 days)
-3. P9-3: Cost tracking (2-3 days)
+**Next Milestone (Window E — agent capability):**
+1. P9-2: Add parallel execution (3-5 days)
+2. P9-3: Cost tracking (2-3 days)
+3. PQ-6: Decompose orchestrator.py (3-5 days)
+4. PQ-7: Decompose intelligent_execution_planner.py (2-3 days)
 
 **Future (Window F-G):**
+- PQ-8: Expand test coverage to untested modules
 - P10-1: Batch workflows
 - P11-x: Advanced features
 
 ## Next Milestone
 
-**After v1.0.0 release:**
-- Smart CLI v1.0.0 has explicit workflow, full test coverage, and observability
-- Releases on narrowed product surface with one stable repository workflow
-- Ready for user feedback and capability expansion
+**Post-v1.0.0 state (as of 2026-04-20):**
+- v1.0.0 is tagged and released
+- 63 tests pass on 8/36 test files (CI does not run full suite — PQ-1)
+- 55 dependencies declared, subset likely unused (PQ-3)
+- No automated PyPI/Docker release pipeline (PQ-4)
+- orchestrator.py is 836 lines and needs decomposition (PQ-6)
 
 ---
 
