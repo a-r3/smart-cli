@@ -49,19 +49,23 @@ class ModifierAgent(BaseAgent):
                 word in description.lower()
                 for word in ["fix", "debug", "correct", "repair", "düzəlt"]
             ):
-                success, files, task_errors = await self._fix_code_errors(
+                success, new_files, changed_files, task_errors = await self._fix_code_errors(
                     target, description
                 )
-                if files:
-                    created_files.extend(files)
+                if new_files:
+                    created_files.extend(new_files)
+                if changed_files:
+                    modified_files.extend(changed_files)
                 if task_errors:
                     errors.extend(task_errors)
             else:
-                success, files, task_errors = await self._generate_new_code(
+                success, new_files, changed_files, task_errors = await self._generate_new_code(
                     target, description
                 )
-                if files:
-                    created_files.extend(files)
+                if new_files:
+                    created_files.extend(new_files)
+                if changed_files:
+                    modified_files.extend(changed_files)
                 if task_errors:
                     errors.extend(task_errors)
 
@@ -100,7 +104,7 @@ class ModifierAgent(BaseAgent):
 
     async def _fix_code_errors(
         self, target: str, description: str
-    ) -> tuple[bool, list, list]:
+    ) -> tuple[bool, list, list, list]:
         """Fix existing code with specific errors."""
         # Extract specific file from description
         import re
@@ -114,7 +118,7 @@ class ModifierAgent(BaseAgent):
         if not os.path.exists(target) or os.path.isdir(target):
             error_msg = f"Cannot fix - target file not found: {target}"
             self.log_warning(error_msg)
-            return False, [], [error_msg]
+            return False, [], [], [error_msg]
 
         # Read the broken code
         with open(target, "r", encoding="utf-8", errors="ignore") as f:
@@ -167,15 +171,15 @@ Format as clean Python code without markdown blocks.
                 self.log_success(f"Updated original file: {target}")
                 modified_files.append(target)
 
-            return True, created_files + modified_files, []
+            return True, created_files, modified_files, []
         else:
             error_msg = "No response from AI for code fixing"
             self.log_warning(error_msg)
-            return False, [], [error_msg]
+            return False, [], [], [error_msg]
 
     async def _generate_new_code(
         self, target: str, description: str
-    ) -> tuple[bool, list, list]:
+    ) -> tuple[bool, list, list, list]:
         """Generate new code - enhanced for complex multi-file projects."""
 
         # First check if Architect Agent has created a project structure
@@ -222,7 +226,7 @@ Format as clean Python code without markdown blocks.
 
     async def _generate_multi_file_project(
         self, description: str
-    ) -> tuple[bool, list, list]:
+    ) -> tuple[bool, list, list, list]:
         """Generate complete multi-file project structure."""
 
         # Enhanced prompt for complex projects with proper directory structure
@@ -302,9 +306,9 @@ CRITICAL: Always use proper directory structure with src/ and tests/ folders!
         else:
             error_msg = "No response from AI for multi-file project"
             self.log_warning(error_msg)
-            return False, [], [error_msg]
+            return False, [], [], [error_msg]
 
-    async def _parse_multi_file_response(self, content: str) -> tuple[bool, list, list]:
+    async def _parse_multi_file_response(self, content: str) -> tuple[bool, list, list, list]:
         """Parse AI response containing multiple files."""
         created_files = []
         errors = []
@@ -359,11 +363,11 @@ CRITICAL: Always use proper directory structure with src/ and tests/ folders!
                 errors.append(error_msg)
 
         success = len(created_files) > 0
-        return success, created_files, errors
+        return success, created_files, [], errors
 
     async def _generate_single_file(
         self, description: str, target: str
-    ) -> tuple[bool, list, list]:
+    ) -> tuple[bool, list, list, list]:
         """Generate single file (original functionality)."""
         code_type = self._determine_code_type(description, target)
 
@@ -469,15 +473,15 @@ Only provide the code block, no explanations outside of the code.
 
                 files_created.append(filename)
                 self.log_success(f"Generated code file: {filename}")
-                return True, files_created, []
+                return True, files_created, [], []
             else:
                 error_msg = "No code content extracted from AI response"
                 self.log_warning(error_msg)
-                return False, [], [error_msg]
+                return False, [], [], [error_msg]
         else:
             error_msg = "No response from AI"
             self.log_warning(error_msg)
-            return False, [], [error_msg]
+            return False, [], [], [error_msg]
 
     def _find_architecture_files(self) -> list:
         """Find architecture files created by Architect Agent."""
@@ -499,7 +503,7 @@ Only provide the code block, no explanations outside of the code.
     
     async def _generate_from_architecture(
         self, description: str, architecture_files: list
-    ) -> tuple[bool, list, list]:
+    ) -> tuple[bool, list, list, list]:
         """Generate code based on existing architecture files."""
         
         self.log_info("Reading architecture specifications...")
@@ -564,7 +568,7 @@ Generate ALL files needed for a complete working system following the architectu
         else:
             error_msg = "No response from AI for architecture-based generation"
             self.log_warning(error_msg)
-            return False, [], [error_msg]
+            return False, [], [], [error_msg]
 
     def _determine_code_type(self, description: str, target: str) -> str:
         """Determine what type of code to generate based on description."""

@@ -90,11 +90,8 @@ async def _execute_single_agent(
     start_time = time.time()
     
     try:
-        # Simulate progress updates
-        for progress in [25, 50, 75]:
-            await asyncio.sleep(0.3)
-            self.ui.update_agent_progress(agent_type, progress)
-            self.ui.update_phase_progress(phase_name, progress)
+        self.ui.update_agent_progress(agent_type, 10, {"status": "delegated"})
+        self.ui.update_phase_progress(phase_name, 10)
         
         # Execute actual agent
         result = await self.delegate_to_agent(

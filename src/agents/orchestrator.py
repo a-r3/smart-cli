@@ -1,8 +1,10 @@
 """Smart CLI Multi-Agent Orchestrator with Full Terminal Dashboard UI."""
 
 import asyncio
+import json
 import os
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console
@@ -111,6 +113,99 @@ class SmartCLIOrchestrator:
         console.print("─" * 36)
         console.print()
 
+    def _infer_workflow_type(self, user_request: str) -> str:
+        """Infer the primary workflow type for the request."""
+        text = user_request.lower()
+        repo_terms = ["repo", "repository", "codebase", "project", "layihə", "kod bazası"]
+        plan_terms = ["plan", "roadmap", "next steps", "implementation plan", "planla"]
+        implement_terms = ["implement", "build", "fix", "apply", "tətbiq et", "düzəlt", "yarat"]
+        understand_terms = ["analyze", "review", "understand", "inspect", "təhlil", "anla", "yoxla"]
+
+        has_repo = any(term in text for term in repo_terms)
+        has_plan = any(term in text for term in plan_terms)
+        has_implement = any(term in text for term in implement_terms)
+        has_understand = any(term in text for term in understand_terms)
+
+        if has_repo and has_understand and has_plan:
+            return "repo_understand_plan"
+        if has_repo and has_understand and has_implement:
+            return "repo_understand_implement"
+        if has_repo and has_understand:
+            return "repo_understand"
+        return "generic"
+
+    def build_workflow_summary(self, plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Build a standardized workflow summary for downstream display."""
+        workflow_type = plan.get("workflow_type", "generic")
+        pipeline = plan.get("pipeline", [])
+        return {
+            "workflow_type": workflow_type,
+            "title": plan.get("title", "Smart Plan"),
+            "stages": pipeline,
+            "estimated_cost": plan.get("estimated_cost", 0.0),
+            "summary_lines": [
+                f"Workflow: {workflow_type}",
+                f"Pipeline: {' -> '.join(pipeline) if pipeline else 'none'}",
+                f"Estimated cost: ${plan.get('estimated_cost', 0.0):.3f}",
+            ],
+        }
+
+    def _display_workflow_summary(self, summary: Dict[str, Any]) -> None:
+        """Render a stable workflow summary in terminal output."""
+        console.print("🧭 [bold cyan]Workflow Summary[/bold cyan]")
+        for line in summary.get("summary_lines", []):
+            console.print(f"   - {line}")
+
+    def build_agent_result_summary(
+        self, agent_type: str, result: Optional[Any]
+    ) -> Dict[str, str]:
+        """Build a stable user-facing summary for one agent result."""
+        phase_name = self._phase_key_for_agent(agent_type).title()
+        agent_display = self.active_agents.get(agent_type, f"{agent_type} Agent")
+
+        if result is None:
+            return {
+                "phase_name": phase_name,
+                "agent_display": agent_display,
+                "status_text": "no result recorded",
+                "icon": "❌",
+            }
+
+        status_parts = []
+        created_files = getattr(result, "created_files", []) or []
+        modified_files = getattr(result, "modified_files", []) or []
+        warnings = getattr(result, "warnings", []) or []
+        errors = getattr(result, "errors", []) or []
+
+        if created_files:
+            status_parts.append(f"created {len(created_files)} files")
+        if modified_files:
+            status_parts.append(f"modified {len(modified_files)} files")
+        if warnings:
+            status_parts.append(f"{len(warnings)} warnings")
+        if errors:
+            status_parts.append(f"{len(errors)} errors")
+
+        status_text = ", ".join(status_parts) if status_parts else "completed with no file changes"
+        icon = "✅" if getattr(result, "success", False) else "❌"
+        return {
+            "phase_name": phase_name,
+            "agent_display": agent_display,
+            "status_text": status_text,
+            "icon": icon,
+        }
+
+    def _display_agent_results_summary(
+        self, agent_results: List[tuple[str, Optional[Any]]]
+    ) -> None:
+        """Render the standardized agent result summary block."""
+        console.print("📌 [bold cyan]Result Summary[/bold cyan]")
+        for agent_type, result in agent_results:
+            summary = self.build_agent_result_summary(agent_type, result)
+            console.print(
+                f"   - {summary['phase_name']} by {summary['agent_display']} → {summary['status_text']} {summary['icon']}"
+            )
+
     async def create_detailed_plan(self, user_request: str) -> Dict[str, Any]:
         """Create intelligent plan with advanced execution planning."""
         # Display Smart CLI banner
@@ -176,6 +271,8 @@ class SmartCLIOrchestrator:
         console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] Pipeline: {pipeline_display}")
         self.ui.add_event("📋", "Orchestrator", f"Execution pipeline: {pipeline_display}")
 
+        workflow_type = self._infer_workflow_type(user_request)
+
         # Create adaptive plan with intelligent execution
         plan = {
             "title": f"Smart {complexity.value.title()} Plan",
@@ -186,10 +283,17 @@ class SmartCLIOrchestrator:
             "execution_plan": execution_plan,
             "steps": self._create_pipeline_steps(pipeline, models, complexity, risk),
             "estimated_cost": self._estimate_plan_cost(pipeline, models),
+            "workflow_type": workflow_type,
         }
+
+        plan["workflow_summary"] = self.build_workflow_summary(plan)
 
         console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] Estimated cost: [bold green]${plan['estimated_cost']:.3f}[/bold green]")
         self.ui.add_event("💰", "Orchestrator", f"Estimated cost: ${plan['estimated_cost']:.3f}")
+        console.print(
+            f"🤖 [bold cyan]Orchestrator:[/bold cyan] Workflow: [bold]{workflow_type}[/bold]"
+        )
+        self._display_workflow_summary(plan["workflow_summary"])
         
         console.print()  # Add spacing
         return plan
@@ -242,6 +346,32 @@ class SmartCLIOrchestrator:
 
         return await self._execute_smart_pipeline(plan, original_request)
 
+    def _record_meta_learning_manifest(self) -> None:
+        """Persist a truthful manifest for orchestrator-side meta-learning updates."""
+        artifacts_dir = Path("artifacts") / "metalearning"
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+        manifest_path = artifacts_dir / "phase_manifest.json"
+        manifest = {
+            "agent": "metalearning",
+            "phase": "metalearning",
+            "timestamp": time.time(),
+            "success": True,
+            "created_files": [],
+            "modified_files": [],
+            "warnings": [],
+            "errors": [],
+            "notes": [
+                "No standalone meta-learning output files are generated yet.",
+                "This manifest records the post-run learning step only.",
+            ],
+        }
+
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2)
+
+        self.artifacts["metalearning"] = [str(manifest_path)]
+
     async def _execute_smart_pipeline(
         self, plan: Dict[str, Any], original_request: str
     ) -> bool:
@@ -268,6 +398,9 @@ class SmartCLIOrchestrator:
         
         # Clean orchestrator execution without complex UI
         console.print("🤖 [bold cyan]Orchestrator:[/bold cyan] Starting execution pipeline")
+        workflow_summary = plan.get("workflow_summary")
+        if workflow_summary:
+            self._display_workflow_summary(workflow_summary)
 
         results = []
         total_cost = 0.0
@@ -335,7 +468,6 @@ class SmartCLIOrchestrator:
                         next_agent = pipeline[i]
                         next_phase = phase_mapping.get(next_agent, "implementation").title()
                         console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] Proceeding to {next_phase} phase...")
-                        await asyncio.sleep(0.5)  # Brief pause for readability
 
                 except Exception as e:
                     console.print(f"❌ {agent_display} failed: {str(e)}")
@@ -348,18 +480,10 @@ class SmartCLIOrchestrator:
             # Add Meta Learning phase at the end if successful
             if success_count > 0 and "metalearning" not in pipeline:
                     console.print(f"🤖 [bold cyan]Orchestrator:[/bold cyan] Dispatching phase [Meta Learning]")
-                    console.print("🧠 MetaLearning Agent: Updating policy_tweaks.json...")
-                    await asyncio.sleep(1.0)
-                    
-                    # Generate meta learning artifacts
-                    meta_artifacts = [
-                        "~/.smart/meta/policy_tweaks.json",
-                        "~/.smart/meta/prompt_recipes.json"
-                    ]
-                    console.print("   - Observed performance patterns")
-                    console.print("   - Updated model selection rules")
+                    console.print("🧠 MetaLearning Agent: Recording post-run learning summary")
+                    self._record_meta_learning_manifest()
                     console.print("Artifacts:")
-                    for artifact in meta_artifacts:
+                    for artifact in self.artifacts.get("metalearning", []):
                         console.print(f"  - {artifact}")
                     console.print("✅ MetaLearning Agent completed")
 
@@ -379,114 +503,45 @@ class SmartCLIOrchestrator:
         time_display = f"{minutes:02d}:{seconds:02d}" if minutes > 0 else f"{seconds}s"
         console.print(f"🎉 [bold green]Project run finished in {time_display}[/bold green]")
         
-        # Show agent results summary
-        for i, (agent_type, result) in enumerate(zip(pipeline, results)):
-            phase_name = phase_mapping.get(agent_type, agent_type).title()
-            agent_display = self.active_agents.get(agent_type, f"{agent_type} Agent")
-            
-            # Create status summary
-            status_parts = []
-            if hasattr(result, 'created_files') and result.created_files:
-                status_parts.append(f"created {len(result.created_files)} files")
-            if hasattr(result, 'modified_files') and result.modified_files:
-                status_parts.append(f"modified {len(result.modified_files)} files")
-            if hasattr(result, 'warnings') and result.warnings:
-                status_parts.append(f"{len(result.warnings)} warnings")
-            if hasattr(result, 'errors') and result.errors:
-                status_parts.append(f"{len(result.errors)} errors")
-            
-            status_text = ", ".join(status_parts) if status_parts else "completed"
-            result_icon = "✅" if result.success else "❌"
-            
-            console.print(f"   - {phase_name} by {agent_display} → {status_text} {result_icon}")
+        self._display_agent_results_summary(list(zip(pipeline, results)))
         
         # Display artifacts summary
         console.print("\n[bold]Artifacts saved to:[/bold]")
-        console.print("  ./artifacts/ (repo specific)")
-        console.print("  ~/.smart/meta/ (global)")
+        console.print("  ./artifacts/ (phase manifests and any real agent outputs)")
         console.print()
 
         return success_count > 0
 
     def _generate_phase_artifacts(self, agent_type: str, phase_name: str, result):
-        """Generate artifacts for completed phase."""
-        import os
-        from pathlib import Path
-        
-        # Create artifacts directory if it doesn't exist
+        """Persist a truthful phase manifest instead of synthetic artifact files."""
         artifacts_dir = Path("artifacts") / phase_name
         artifacts_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate phase-specific artifacts
-        artifacts = []
-        
-        if agent_type == "analyzer":
-            artifacts.append("artifacts/analysis/analysis_report.json")
-            artifacts.append("artifacts/analysis/code_metrics.json")
-        elif agent_type == "architect":
-            artifacts.append("artifacts/architecture/architecture.json")
-            artifacts.append("artifacts/architecture/work_packages.json")
-        elif agent_type == "modifier":
-            artifacts.append("artifacts/implementation/change_set.json")
-            artifacts.append("artifacts/implementation/patches.diff")
-        elif agent_type == "tester":
-            artifacts.append("artifacts/testing/test_report.json")
-            artifacts.append("artifacts/testing/coverage_report.html")
-        elif agent_type == "reviewer":
-            artifacts.append("artifacts/review/review_report.json")
-            artifacts.append("artifacts/review/quality_metrics.json")
-        elif agent_type == "metalearning":
-            artifacts.append("~/.smart/meta/policy_tweaks.json")
-            artifacts.append("~/.smart/meta/prompt_recipes.json")
-        
-        # Store artifacts for this phase
-        if artifacts:
-            self.artifacts[phase_name] = artifacts
-        
-        # Create mock artifact files for demonstration
-        for artifact_path in artifacts:
-            artifact_file = Path(artifact_path)
-            artifact_file.parent.mkdir(parents=True, exist_ok=True)
-            if not artifact_file.exists():
-                # Create minimal JSON structure
-                mock_content = {
-                    "agent": agent_type,
-                    "phase": phase_name,
-                    "timestamp": time.time(),
-                    "success": getattr(result, 'success', True),
-                    "summary": f"Generated by {agent_type} agent"
-                }
-                try:
-                    import json
-                    with open(artifact_file, 'w') as f:
-                        json.dump(mock_content, f, indent=2)
-                except Exception:
-                    pass  # Ignore file creation errors
+
+        reported_artifacts = []
+        reported_artifacts.extend(getattr(result, "created_files", []) or [])
+        reported_artifacts.extend(getattr(result, "modified_files", []) or [])
+
+        manifest_path = artifacts_dir / "phase_manifest.json"
+        manifest = {
+            "agent": agent_type,
+            "phase": phase_name,
+            "timestamp": time.time(),
+            "success": getattr(result, "success", True),
+            "created_files": getattr(result, "created_files", []) or [],
+            "modified_files": getattr(result, "modified_files", []) or [],
+            "warnings": getattr(result, "warnings", []) or [],
+            "errors": getattr(result, "errors", []) or [],
+        }
+
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2)
+
+        self.artifacts[phase_name] = reported_artifacts + [str(manifest_path)]
 
     async def _execute_agent_with_progress(self, agent_type: str, original_request: str, complexity: str, phase_name: str):
-        """Execute agent with enhanced progress display."""
-        from rich.progress import Progress, BarColumn, TextColumn, TimeRemainingColumn
-        
-        # Enhanced progress messages based on agent type
-        progress_messages = {
-            "analyzer": ["Scanning files", "Running static analysis", "Checking semantics", "Generating report"],
-            "architect": ["Analyzing requirements", "Designing architecture", "Creating work packages", "Finalizing design"],
-            "modifier": ["Applying patches", "Modifying files", "Running tests", "Validating changes"],
-            "tester": ["Setting up tests", "Running unit tests", "Running integration tests", "Generating coverage"],
-            "reviewer": ["Checking code style", "Security analysis", "Performance review", "Final approval"],
-            "metalearning": ["Analyzing patterns", "Updating policies", "Optimizing prompts", "Saving improvements"]
-        }
-        
-        messages = progress_messages.get(agent_type, ["Processing", "Working", "Finalizing", "Completed"])
-        
-        # Show enhanced progress
-        for i, message in enumerate(messages):
-            progress = int((i + 1) * 100 / len(messages))
-            progress_bar = "■" * (progress // 10) + "□" * (10 - progress // 10)
-            console.print(f"   Progress: [{progress_bar}] {progress}% → {message}")
-            
-            await asyncio.sleep(0.3)  # Shorter simulation time
-        
+        """Execute an agent with minimal factual status output."""
+        console.print(f"   Status: delegating to {agent_type} agent")
+
         # Execute the actual agent
         result = await self.delegate_to_agent(
             agent_type,
@@ -635,6 +690,8 @@ class SmartCLIOrchestrator:
             import time
             phase_start_time = time.time()
             
+            phase_results = []
+
             if phase.execution_mode.value == "parallel_safe":
                 # Execute agents in parallel
                 import asyncio
@@ -645,7 +702,12 @@ class SmartCLIOrchestrator:
                 
                 try:
                     phase_results = await asyncio.gather(*tasks, return_exceptions=True)
-                    results.extend([r for r in phase_results if not isinstance(r, Exception)])
+                    for agent_name, result in zip(phase.agents, phase_results):
+                        if isinstance(result, Exception):
+                            continue
+                        results.append(result)
+                        phase_key = self._phase_key_for_agent(agent_name)
+                        self._generate_phase_artifacts(agent_name, phase_key, result)
                 except Exception as e:
                     console.print(f"⚠️ Phase {phase.phase_number} parallel execution error: {e}")
                     # Continue with next phase
@@ -656,6 +718,9 @@ class SmartCLIOrchestrator:
                     try:
                         result = await self._execute_agent_with_progress(agent, original_request, complexity.value if hasattr(complexity, 'value') else str(complexity), f"Phase {phase.phase_number}")
                         results.append(result)
+                        phase_results.append(result)
+                        phase_key = self._phase_key_for_agent(agent)
+                        self._generate_phase_artifacts(agent, phase_key, result)
                     except Exception as e:
                         console.print(f"⚠️ Agent {agent} error: {e}")
                         # Continue with next agent
@@ -664,12 +729,18 @@ class SmartCLIOrchestrator:
             phase_duration = time.time() - phase_start_time
             console.print(f"\n🤖 [bold cyan]Orchestrator:[/bold cyan] {phase_name} completed ({phase_duration:.1f}s)")
             
-            # Show artifacts if any were generated
-            artifacts_dir = f"artifacts/{phase_name.lower().replace(' ', '_').replace('&', 'and')}"
-            console.print(f"Artifacts: {artifacts_dir}/")
+            artifact_paths = []
+            for agent_name in phase.agents:
+                phase_key = self._phase_key_for_agent(agent_name)
+                artifact_paths.extend(self.artifacts.get(phase_key, []))
+
+            if artifact_paths:
+                console.print("Artifacts:")
+                for artifact in artifact_paths:
+                    console.print(f"  - {artifact}")
         
         # Final summary by Orchestrator
-        console.print("\n🤖 [bold cyan]Orchestrator:[/bold cyan] All phases completed successfully 🎉")
+        console.print("\n🤖 [bold cyan]Orchestrator:[/bold cyan] All phases completed")
         console.print("─" * 50)
         
         # Calculate total duration
@@ -683,10 +754,34 @@ class SmartCLIOrchestrator:
             agent_list = ", ".join([f"{agent.title()} Agent" for agent in phase.agents])
             phase_name = phase_names.get(i, f"Phase {i}")
             console.print(f"- {phase_name}: {agent_list}")
+
+        agent_results = []
+        result_index = 0
+        for phase in execution_plan:
+            for agent in phase.agents:
+                if result_index >= len(results):
+                    agent_results.append((agent, None))
+                else:
+                    agent_results.append((agent, results[result_index]))
+                result_index += 1
+        if agent_results:
+            console.print()
+            self._display_agent_results_summary(agent_results)
         
         console.print("\nArtifacts saved to:")
-        console.print("  ./artifacts/ (repo specific)")
-        console.print("  ~/.smart/meta/ (global)")
+        console.print("  ./artifacts/ (phase manifests and any real agent outputs)")
         console.print()
         
         return results
+
+    def _phase_key_for_agent(self, agent_type: str) -> str:
+        """Map an agent type to the phase artifact key."""
+        phase_mapping = {
+            "analyzer": "analysis",
+            "architect": "architecture",
+            "modifier": "implementation",
+            "tester": "testing",
+            "reviewer": "review",
+            "metalearning": "metalearning",
+        }
+        return phase_mapping.get(agent_type, agent_type)
