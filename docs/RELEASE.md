@@ -182,10 +182,26 @@ Start Release Process
 
 ## Post-Release Verification
 
-- [ ] **Tag Release**: Create git tag `v1.0.0`
+- [ ] **Tag Release**: Create git tag (e.g. `v1.1.0`)
 - [ ] **Changelog Updated**: CHANGELOG.md reflects release
-- [ ] **CI Passes**: GitHub Actions workflow shows green
-- [ ] **Documentation Deployed**: If applicable
+- [ ] **CI Passes**: GitHub Actions `ci.yml` shows green across all matrix versions
+- [ ] **Automated publish triggered**: `release.yml` workflow ran on the new tag
+
+## Automated Release Pipeline
+
+Pushing a version tag triggers `.github/workflows/release.yml`:
+
+1. **Build** — `python -m build` produces wheel + sdist
+2. **PyPI publish** — via `pypa/gh-action-pypi-publish` (uses OIDC, no token needed if environment `pypi` is configured in repo settings)
+3. **Docker push** — image pushed to `ghcr.io/<owner>/smart-cli:<version>` and `:latest`
+
+### Required setup (one-time, per repo)
+
+| What | Where |
+|------|-------|
+| PyPI Trusted Publisher | PyPI → Your projects → smart-cli → Publishing → Add publisher → GitHub Actions |
+| GHCR | Automatic — uses `GITHUB_TOKEN` (no secret needed) |
+| GitHub environment | Repo Settings → Environments → create `pypi` |
 
 ## Sign-Off
 
