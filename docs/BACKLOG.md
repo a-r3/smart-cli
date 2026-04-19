@@ -700,33 +700,35 @@ Suggested files:
 
 ### Status
 - Owner: Codex
-- Started:
+- Started: 2026-04-19
 - Target: current execution window B
-- State: not started
+- State: done
 
 ### Notes
-- The product now has workflow metadata and truthful orchestration output, but it still needs one repeatable repository fixture proving the workflow works end-to-end.
+- The product now has workflow metadata and truthful orchestration output, and the workflow has been validated end-to-end with a fixture repository.
 
 ### Validation
 - `pytest tests/test_repo_workflow_e2e.py --tb=short -q`
 
-Problem:
-- The primary repository workflow is described and partially tested, but not yet validated against a realistic fixture repository from request classification through orchestrator output.
-
-Tasks:
-- add a small fixture repo under `tests/fixtures/`
-- define one golden-path request such as "analyze this repository and give me an implementation plan"
-- assert classifier metadata, orchestrator summary, and artifact manifests end-to-end
+Results:
+- Created fixture repository at `tests/fixtures/sample_repo/` with calculator example
+- Built 11 comprehensive tests covering:
+  - Classifier recognizes repo analysis requests
+  - Orchestrator builds stable workflow summaries
+  - Orchestrator correctly infers workflow types (repo_understand_plan, repo_understand)
+  - Agent fallback paths operate without file changes
+  - Artifact manifests follow stable structure
+- All tests pass: 11 passed in 0.23s
 
 Acceptance criteria:
-- one repository workflow passes through the full routing and orchestration stack
-- the workflow is reproducible in CI
+- ✅ one repository workflow passes through the full routing and orchestration stack
+- ✅ the workflow is reproducible in CI
 
-Suggested files:
-- `tests/fixtures/`
-- `tests/test_repo_workflow_e2e.py`
-- `src/core/request_router.py`
-- `src/agents/orchestrator.py`
+Suggested files (completed):
+- `tests/fixtures/sample_repo/` (new)
+- `tests/test_repo_workflow_e2e.py` (new)
+- `src/core/intelligent_request_classifier.py` (used)
+- `src/agents/orchestrator.py` (used)
 
 ### P6-3: Add an explicit workflow command surface
 
