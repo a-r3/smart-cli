@@ -12,10 +12,15 @@ Rules for using it:
 ## Current Focus
 
 Current milestone:
-- Phase 1: Product Truth Alignment
+- Phase 6: Workflow Differentiation
 
 Current next milestone after that:
-- Phase 2: Reliable Core
+- Phase 7: Agents and Orchestration hardening
+
+Current execution window:
+- Window A: lock real execution contracts across all agents
+- Window B: make one repo workflow demonstrably reliable end-to-end
+- Window C: add observability and release discipline around that workflow
 
 ## P0: Product Truth Alignment
 
@@ -647,26 +652,200 @@ Acceptance criteria:
 - report/document helpers return paths for files that exist
 - analyzer, architect, and tester helper contracts are covered by tests
 
+## P6: Workflow Reliability
+
+### P6-1: Audit ReviewerAgent and fallback execution contracts
+
+### Status
+- Owner: Codex
+- Started: 2026-04-19
+- Target: current execution window A
+- State: done
+
+### Notes
+- `ReviewerAgent` and the basic fallback paths still need contract-level tests for:
+- `created_files`
+- `modified_files`
+- `warnings`
+- `errors`
+- `output_data`
+- Added focused coverage in `tests/test_reviewer_contract.py`.
+- Added focused coverage in `tests/test_basic_fallback_contracts.py`.
+- Reviewer and non-AI fallback paths are now locked against silent file-change claims.
+
+### Validation
+- `pytest tests/test_reviewer_contract.py tests/test_basic_fallback_contracts.py --tb=short -q`
+
+Problem:
+- Some agent and fallback paths are now more truthful, but the repo still lacks a full contract audit for review-only and fallback execution paths.
+
+Tasks:
+- add focused tests for `ReviewerAgent` success and failure outputs
+- add focused tests for analyzer, architect, and tester fallback result contracts
+- verify no path silently claims file creation when none occurred
+
+Acceptance criteria:
+- reviewer and fallback paths expose stable result contracts
+- no reviewed path mixes file changes with non-file outputs
+
+Suggested files:
+- `src/agents/reviewer_agent.py`
+- `src/agents/analyzer_agent.py`
+- `src/agents/architect_agent.py`
+- `src/agents/tester_agent.py`
+- `tests/test_reviewer_contract.py`
+- `tests/test_basic_fallback_contracts.py`
+
+### P6-2: Build one end-to-end repository workflow fixture
+
+### Status
+- Owner: Codex
+- Started:
+- Target: current execution window B
+- State: not started
+
+### Notes
+- The product now has workflow metadata and truthful orchestration output, but it still needs one repeatable repository fixture proving the workflow works end-to-end.
+
+### Validation
+- `pytest tests/test_repo_workflow_e2e.py --tb=short -q`
+
+Problem:
+- The primary repository workflow is described and partially tested, but not yet validated against a realistic fixture repository from request classification through orchestrator output.
+
+Tasks:
+- add a small fixture repo under `tests/fixtures/`
+- define one golden-path request such as "analyze this repository and give me an implementation plan"
+- assert classifier metadata, orchestrator summary, and artifact manifests end-to-end
+
+Acceptance criteria:
+- one repository workflow passes through the full routing and orchestration stack
+- the workflow is reproducible in CI
+
+Suggested files:
+- `tests/fixtures/`
+- `tests/test_repo_workflow_e2e.py`
+- `src/core/request_router.py`
+- `src/agents/orchestrator.py`
+
+### P6-3: Add an explicit workflow command surface
+
+### Status
+- Owner: Codex
+- Started:
+- Target: current execution window B
+- State: not started
+
+### Notes
+- Right now the repository workflow is implicit through natural-language routing.
+- A small explicit command surface would make the product easier to demo, test, and document.
+
+### Validation
+- `pytest tests/test_cli.py tests/test_workflow_command.py --tb=short -q`
+
+Problem:
+- The strongest workflow in the product is still hidden behind prompt phrasing instead of a first-class CLI contract.
+
+Tasks:
+- decide on one explicit command such as `smart workflow repo-plan`
+- map it to the existing classifier/orchestrator path
+- document the command in README and workflow docs
+- add CLI and integration coverage
+
+Acceptance criteria:
+- one repository workflow can be invoked explicitly from the CLI
+- docs and tests describe the same workflow contract
+
+Suggested files:
+- `src/cli.py`
+- `src/core/request_router.py`
+- `docs/WORKFLOWS.md`
+- `tests/test_workflow_command.py`
+
+## P7: Observability and Release Discipline
+
+### P7-1: Add structured execution logs for workflow runs
+
+### Status
+- Owner: Codex
+- Started:
+- Target: current execution window C
+- State: not started
+
+### Notes
+- Current terminal output is much more truthful, but it is still primarily presentation-oriented.
+- The next step is a machine-readable execution record for debugging and release verification.
+
+### Validation
+- `pytest tests/test_execution_logs.py --tb=short -q`
+
+Problem:
+- Smart CLI still lacks a structured execution log that can be used to inspect failures, artifact decisions, and workflow routing after a run.
+
+Tasks:
+- define one JSON execution log schema
+- persist one log per run under `artifacts/session/`
+- include workflow type, agent summaries, artifact manifests, warnings, and errors
+- test log creation and schema shape
+
+Acceptance criteria:
+- each run produces one structured execution log
+- execution logs match the real workflow and artifact output
+
+Suggested files:
+- `src/agents/orchestrator.py`
+- `src/core/session_manager.py`
+- `tests/test_execution_logs.py`
+
+### P7-2: Prepare a release checklist for the narrowed product surface
+
+### Status
+- Owner: Codex
+- Started:
+- Target: after P7-1
+- State: not started
+
+### Notes
+- The repo now has multiple cleanup commits and a more honest surface.
+- It needs a release gate that matches the narrowed, tested product instead of the older broader positioning.
+
+### Validation
+- manual review of checklist against current test suite and docs
+
+Problem:
+- There is no release checklist tying together command contract, workflow contract, CI status, and documentation truthfulness.
+
+Tasks:
+- define release prerequisites
+- list required test commands
+- tie the checklist to the explicit workflow contract
+- add changelog/release-note expectations
+
+Acceptance criteria:
+- one release checklist exists and matches the tested product surface
+
+Suggested files:
+- `docs/RELEASE.md`
+- `README.md`
+- `.github/workflows/ci.yml`
+
 ## Suggested Execution Order
 
-1. P0-1: Unify CLI entrypoint
-2. P0-2: Define the real command contract
-3. P0-3: Make tests match implementation
-4. P1-1: First-run setup flow
-5. P1-2: Stabilize SmartCLI lifecycle
-6. P1-3: Honest CI
-7. P2-1: Split provider implementations
-8. P3-1: Reduce public modes to tested modes
+1. P6-1: Audit ReviewerAgent and fallback execution contracts
+2. P6-2: Build one end-to-end repository workflow fixture
+3. P6-3: Add an explicit workflow command surface
+4. P7-1: Add structured execution logs for workflow runs
+5. P7-2: Prepare a release checklist for the narrowed product surface
 
-## Good First Milestone
+## Next Milestone
 
-The first milestone should include:
-- P0-1
-- P0-2
-- P0-3
+The next milestone should include:
+- P6-1
+- P6-2
+- P6-3
 
 Milestone result:
-- Smart CLI has a truthful CLI contract and passing core CLI tests.
+- Smart CLI has one explicit, tested, end-to-end repository workflow.
 
 ## Tracking Template
 
