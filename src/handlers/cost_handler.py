@@ -1,10 +1,19 @@
 """Cost Management Handler for Smart CLI."""
 
+from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from .base_handler import BaseHandler
+
+try:
+    from ..core.ai_cost_optimizer import get_cost_optimizer
+    from ..core.budget_profiles import UsageProfile, get_profile_manager
+except ImportError:
+    from core.ai_cost_optimizer import get_cost_optimizer
+    from core.budget_profiles import UsageProfile, get_profile_manager
 
 console = Console()
 
@@ -69,12 +78,6 @@ class CostHandler(BaseHandler):
     async def _process_cost_command(self, command: str):
         """Process cost management commands."""
         lower_cmd = command.lower()
-
-        # Import cost optimizer
-        try:
-            from ..core.ai_cost_optimizer import get_cost_optimizer
-        except ImportError:
-            from core.ai_cost_optimizer import get_cost_optimizer
         cost_optimizer = get_cost_optimizer()
 
         # Profile commands first (before generic 'set' detection)
@@ -274,7 +277,7 @@ class CostHandler(BaseHandler):
         cost_optimizer.budget.daily_limit = amount
 
         # Update environment file
-        await self._update_project_config("AI_DAILY_LIMIT", str(amount))
+        await self._update_env_file("AI_DAILY_LIMIT", str(amount))
 
         console.print(
             f"✅ [green]Daily budget limit updated: ${old_limit:.2f} → ${amount:.2f}[/green]"
@@ -291,7 +294,7 @@ class CostHandler(BaseHandler):
         old_limit = cost_optimizer.budget.monthly_limit
         cost_optimizer.budget.monthly_limit = amount
 
-        await self._update_project_config("AI_MONTHLY_LIMIT", str(amount))
+        await self._update_env_file("AI_MONTHLY_LIMIT", str(amount))
 
         console.print(
             f"✅ [green]Monthly budget limit updated: ${old_limit:.2f} → ${amount:.2f}[/green]"
@@ -308,7 +311,7 @@ class CostHandler(BaseHandler):
         old_limit = cost_optimizer.budget.per_request_limit
         cost_optimizer.budget.per_request_limit = amount
 
-        await self._update_project_config("AI_REQUEST_LIMIT", str(amount))
+        await self._update_env_file("AI_REQUEST_LIMIT", str(amount))
 
         console.print(
             f"✅ [green]Per-request limit updated: ${old_limit:.2f} → ${amount:.2f}[/green]"
@@ -355,6 +358,13 @@ class CostHandler(BaseHandler):
         except Exception as e:
             console.print(f"❌ [red]Failed to update project config: {e}[/red]")
 
+    async def _update_env_file(self, key: str, value: str):
+        """Legacy wrapper kept for tests and older handlers."""
+        env_file = Path(".env")
+        if not env_file.exists():
+            console.print("⚠️ [yellow].env file not found; updating project config instead[/yellow]")
+        await self._update_project_config(key, value)
+
 
     async def _interactive_budget_setup(self, cost_optimizer):
         """Interactive budget configuration wizard."""
@@ -382,11 +392,6 @@ class CostHandler(BaseHandler):
 
     async def _handle_profile_commands(self, command: str):
         """Handle profile-related commands."""
-        try:
-            from ..core.budget_profiles import UsageProfile, get_profile_manager
-        except ImportError:
-            from core.budget_profiles import UsageProfile, get_profile_manager
-
         profile_manager = get_profile_manager()
         command_lower = command.lower()
 
@@ -471,12 +476,14 @@ class CostHandler(BaseHandler):
 
             # Update environment variables
             for key, value in env_vars.items():
-                await self._update_project_config(key, value)
+                await self._update_env_file(key, value)
 
             console.print(f"✅ [green]Applied '{profile.name}' budget profile![/green]")
             console.print(f"   Daily limit: ${profile.daily_limit:.2f}")
             console.print(f"   Monthly limit: ${profile.monthly_limit:.2f}")
-            console.print(f"   Per-request limit: ${profile.per_request_limit:.2f}")
+            per_request_limit = getattr(profile, "per_request_limit", None)
+            if isinstance(per_request_limit, (int, float)):
+                console.print(f"   Per-request limit: ${per_request_limit:.2f}")
             console.print("🔄 [blue]Restart Smart CLI to apply changes[/blue]")
 
         except ValueError as e:

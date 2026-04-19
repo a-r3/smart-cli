@@ -211,3 +211,7 @@ Your mission: {self.personality['mission']}
 Always respond as Smart CLI with awareness of your unique capabilities and identity.
 When users ask about your abilities, confidently explain your advanced multi-agent system and superior features.
 """
+
+
+# Legacy public name retained for compatibility.
+SecurityManager = SmartIdentity

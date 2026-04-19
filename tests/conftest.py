@@ -1,5 +1,6 @@
 """Test configuration and fixtures for Smart CLI."""
 
+import inspect
 import pytest
 from unittest.mock import Mock, AsyncMock
 from pathlib import Path
@@ -247,6 +248,32 @@ def event_loop():
 
 # Test markers for different test categories
 pytest_plugins = []
+collect_ignore_glob = ["fixtures/sample_repo/tests/test_*.py"]
+
+
+def pytest_pyfunc_call(pyfuncitem):
+    """Run async tests even when pytest-asyncio is unavailable."""
+    if not inspect.iscoroutinefunction(pyfuncitem.obj):
+        return None
+
+    import asyncio
+
+    loop = pyfuncitem.funcargs.get("event_loop")
+    owns_loop = loop is None
+    if loop is None:
+        loop = asyncio.new_event_loop()
+
+    try:
+        kwargs = {
+            name: pyfuncitem.funcargs[name]
+            for name in pyfuncitem._fixtureinfo.argnames
+        }
+        loop.run_until_complete(pyfuncitem.obj(**kwargs))
+    finally:
+        if owns_loop:
+            loop.close()
+
+    return True
 
 def pytest_configure(config):
     """Configure pytest with custom markers."""
@@ -261,6 +288,12 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "ai: marks tests that require AI API calls"
+    )
+    config.addinivalue_line(
+        "markers", "asyncio: marks async tests"
+    )
+    config.addinivalue_line(
+        "markers", "benchmark: marks benchmark tests"
     )
     config.addinivalue_line(
         "markers", "budget: marks tests for budget management features"

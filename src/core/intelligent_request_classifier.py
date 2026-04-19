@@ -15,6 +15,10 @@ class RequestType(Enum):
     CONVERSATION = "conversation"  # General AI chat, questions
     LEARNING = "learning"  # Help, tutorials, explanations
     ANALYSIS = "analysis"  # Code review, file analysis
+    CODE_GENERATION = "development"
+    CODE_REVIEW = "analysis"
+    DEBUGGING = "development"
+    ARCHITECTURE = "development"
 
 
 @dataclass
@@ -23,9 +27,13 @@ class ClassificationResult:
 
     request_type: RequestType
     confidence: float
-    reasoning: List[str]
-    suggested_action: str
-    context_hints: Dict[str, any]
+    reasoning: List[str] | str
+    suggested_action: str = ""
+    context_hints: Dict[str, any] | None = None
+
+    def __post_init__(self):
+        if self.context_hints is None:
+            self.context_hints = {}
 
 
 class IntelligentRequestClassifier:

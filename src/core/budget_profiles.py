@@ -198,3 +198,8 @@ def get_profile_manager() -> BudgetProfileManager:
     if _profile_manager is None:
         _profile_manager = BudgetProfileManager()
     return _profile_manager
+
+
+def get_budget_profiles() -> Dict[UsageProfile, BudgetProfile]:
+    """Legacy helper returning all configured profiles."""
+    return get_profile_manager().list_profiles()

@@ -14,7 +14,9 @@ class ModeSystemActivator:
         """Initialize with Smart CLI instance."""
         self.smart_cli = smart_cli_instance
         self.mode_integration_manager = None
+        self.integration_manager = None
         self.is_activated = False
+        self.enhanced_mode_active = False
         
     async def activate_enhanced_mode_system(self) -> bool:
         """Activate the enhanced mode system."""
@@ -24,12 +26,14 @@ class ModeSystemActivator:
             
             # Initialize integration manager
             self.mode_integration_manager = get_mode_integration_manager(self.smart_cli)
+            self.integration_manager = self.mode_integration_manager
             
             # Initialize enhanced mode system
             success = await self.mode_integration_manager.initialize_enhanced_mode_system()
             
             if success:
                 self.is_activated = True
+                self.enhanced_mode_active = True
                 console.print("🎭 [bold green]Enhanced Mode System activated![/bold green]")
                 
                 # Show quick help
@@ -81,6 +85,6 @@ _mode_activator = None
 def get_mode_system_activator(smart_cli_instance) -> ModeSystemActivator:
     """Get global mode system activator."""
     global _mode_activator
-    if _mode_activator is None:
+    if _mode_activator is None or _mode_activator.smart_cli is not smart_cli_instance:
         _mode_activator = ModeSystemActivator(smart_cli_instance)
     return _mode_activator

@@ -1,6 +1,6 @@
 """Intelligent Execution Planner - Smart agent scheduling with dependency management."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -29,6 +29,48 @@ class ExecutionMode(Enum):
     SEQUENTIAL = "sequential"  # One by one execution
     PARALLEL_SAFE = "parallel_safe"  # Parallel with no conflicts
     HYBRID = "hybrid"  # Mix of sequential and parallel
+
+
+@dataclass
+class AgentDependency:
+    """Compatibility dependency contract expected by older tests."""
+
+    agent: str
+    depends_on: List[str] = field(default_factory=list)
+    provides: List[str] = field(default_factory=list)
+    conflicts_with: List[str] = field(default_factory=list)
+    priority: int = 1
+
+
+@dataclass
+class ParallelGroup:
+    """Compatibility execution group contract expected by older tests."""
+
+    agents: List[str]
+    estimated_duration: float
+    resource_requirements: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResourceConflict:
+    """Compatibility resource conflict contract expected by older tests."""
+
+    agent1: str
+    agent2: str
+    resource: str
+    severity: str
+    resolution: str
+
+
+@dataclass
+class ExecutionPlan:
+    """Compatibility execution plan contract expected by older tests."""
+
+    parallel_groups: List[ParallelGroup]
+    execution_order: List[str]
+    estimated_total_duration: float
+    resource_conflicts: List[ResourceConflict]
+    optimization_applied: bool = False
 
 
 @dataclass
@@ -138,6 +180,43 @@ class IntelligentExecutionPlanner:
                 "agents": ["analyzer", "modifier"],
                 "strategy": "sequential_creation",
             },
+        }
+        self.agent_dependencies = {
+            "analyzer": AgentDependency(
+                agent="analyzer",
+                depends_on=[],
+                provides=["analysis"],
+                conflicts_with=[],
+                priority=2,
+            ),
+            "architect": AgentDependency(
+                agent="architect",
+                depends_on=["analyzer"],
+                provides=["architecture"],
+                conflicts_with=[],
+                priority=4,
+            ),
+            "modifier": AgentDependency(
+                agent="modifier",
+                depends_on=["analyzer"],
+                provides=["code_changes"],
+                conflicts_with=["tester"],
+                priority=3,
+            ),
+            "tester": AgentDependency(
+                agent="tester",
+                depends_on=["modifier"],
+                provides=["test_results"],
+                conflicts_with=["modifier"],
+                priority=2,
+            ),
+            "reviewer": AgentDependency(
+                agent="reviewer",
+                depends_on=["tester"],
+                provides=["review_feedback"],
+                conflicts_with=[],
+                priority=1,
+            ),
         }
 
     def create_intelligent_execution_plan(
@@ -565,3 +644,154 @@ class IntelligentExecutionPlanner:
             "parallel_duration": parallel_duration,
             "efficiency_gain": efficiency,
         }
+
+    def get_agent_dependencies(self, agent: str) -> AgentDependency:
+        """Return dependency metadata for one agent."""
+        return self.agent_dependencies.get(agent, AgentDependency(agent=agent))
+
+    def detect_conflicts(self, agents: List[str]) -> List[ResourceConflict]:
+        """Detect pairwise resource conflicts among agents."""
+        conflicts: List[ResourceConflict] = []
+        unique_agents = list(dict.fromkeys(agents))
+        for index, agent in enumerate(unique_agents):
+            profile = self.agent_profiles.get(agent)
+            if not profile:
+                continue
+            for other in unique_agents[index + 1 :]:
+                other_profile = self.agent_profiles.get(other)
+                if not other_profile:
+                    continue
+                if other in profile.conflicts_with or agent in other_profile.conflicts_with:
+                    conflicts.append(
+                        ResourceConflict(
+                            agent1=agent,
+                            agent2=other,
+                            resource="file_system",
+                            severity="high",
+                            resolution="sequential",
+                        )
+                    )
+        return conflicts
+
+    def topological_sort(self, agents: List[str]) -> List[str]:
+        """Return a dependency-respecting execution order for agents."""
+        unique_agents = list(dict.fromkeys(agents))
+        graph: Dict[str, List[str]] = {}
+        for agent in unique_agents:
+            dependency = self.agent_dependencies.get(agent)
+            graph[agent] = [
+                depends_on
+                for depends_on in (dependency.depends_on if dependency else [])
+                if depends_on in unique_agents
+            ]
+
+        in_degree = {agent: len(dependencies) for agent, dependencies in graph.items()}
+        dependents: Dict[str, List[str]] = {agent: [] for agent in unique_agents}
+        for agent, dependencies in graph.items():
+            for dependency_name in dependencies:
+                dependents.setdefault(dependency_name, []).append(agent)
+
+        queue = [agent for agent in unique_agents if in_degree.get(agent, 0) == 0]
+        result: List[str] = []
+
+        while queue:
+            current = queue.pop(0)
+            result.append(current)
+            for dependent in dependents.get(current, []):
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
+
+        if len(result) != len(unique_agents):
+            return unique_agents
+
+        return result
+
+    def optimize_parallel_execution(self, agents: List[str]) -> List[ParallelGroup]:
+        """Group agents into simple parallel-safe batches."""
+        execution_order = self.topological_sort(agents)
+        groups: List[ParallelGroup] = []
+
+        for agent in execution_order:
+            profile = self.agent_profiles.get(agent)
+            placed = False
+
+            if profile and profile.parallel_safe:
+                for group in groups:
+                    group_conflicts = {
+                        conflict.agent1
+                        for conflict in self.detect_conflicts(group.agents + [agent])
+                    } | {
+                        conflict.agent2
+                        for conflict in self.detect_conflicts(group.agents + [agent])
+                    }
+                    dependencies_satisfied = all(
+                        dependency not in group.agents
+                        for dependency in profile.dependencies
+                    )
+                    if not group_conflicts and dependencies_satisfied:
+                        group.agents.append(agent)
+                        group.estimated_duration = max(
+                            group.estimated_duration,
+                            profile.execution_time_estimate,
+                        )
+                        group.resource_requirements["cpu"] = (
+                            group.resource_requirements.get("cpu", 0) + 1
+                        )
+                        placed = True
+                        break
+
+            if not placed:
+                groups.append(
+                    ParallelGroup(
+                        agents=[agent],
+                        estimated_duration=(
+                            profile.execution_time_estimate if profile else 10.0
+                        ),
+                        resource_requirements={"cpu": 1, "memory": 512},
+                    )
+                )
+
+        return groups
+
+    def estimate_execution_time(
+        self, agents: List[str], complexity: str, risk_level: str
+    ) -> float:
+        """Estimate execution time for a plan."""
+        complexity_factor = {"low": 0.8, "medium": 1.0, "high": 1.3}.get(
+            complexity, 1.0
+        )
+        risk_factor = {"low": 1.0, "medium": 1.1, "critical": 1.25}.get(
+            risk_level, 1.0
+        )
+        groups = self.optimize_parallel_execution(agents)
+        base_duration = sum(group.estimated_duration for group in groups)
+        return base_duration * complexity_factor * risk_factor
+
+    def create_execution_plan(
+        self, agents: List[str], task_description: str, complexity: str, risk_level: str
+    ) -> ExecutionPlan:
+        """Create the legacy execution plan contract expected by older tests."""
+        if not agents:
+            return ExecutionPlan(
+                parallel_groups=[],
+                execution_order=[],
+                estimated_total_duration=0,
+                resource_conflicts=[],
+                optimization_applied=False,
+            )
+
+        execution_order = self.topological_sort(agents)
+        parallel_groups = self.optimize_parallel_execution(execution_order)
+        estimated_total_duration = self.estimate_execution_time(
+            execution_order, complexity, risk_level
+        )
+        resource_conflicts = self.detect_conflicts(execution_order)
+
+        return ExecutionPlan(
+            parallel_groups=parallel_groups,
+            execution_order=execution_order,
+            estimated_total_duration=estimated_total_duration,
+            resource_conflicts=resource_conflicts,
+            optimization_applied=len(parallel_groups) < len(execution_order),
+        )

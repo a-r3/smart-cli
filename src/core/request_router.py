@@ -32,23 +32,26 @@ class EnhancedRequestRouter:
     def __init__(self, smart_cli_instance):
         """Initialize router with Smart CLI instance, mode manager and context manager."""
         self.smart_cli = smart_cli_instance
-        self.orchestrator = smart_cli_instance.orchestrator
-        self.handlers = smart_cli_instance.handlers
-        self.command_handler = smart_cli_instance.command_handler
-        self.debug = smart_cli_instance.debug
+        self.orchestrator = getattr(smart_cli_instance, "orchestrator", None)
+        self.handlers = getattr(smart_cli_instance, "handlers", {})
+        self.command_handler = getattr(smart_cli_instance, "command_handler", None)
+        self.debug = getattr(smart_cli_instance, "debug", False)
 
         # Initialize intelligent systems
         self.classifier = get_intelligent_classifier()
-        self.mode_manager = get_mode_manager(smart_cli_instance.config)
+        self.mode_manager = get_mode_manager(getattr(smart_cli_instance, "config", {}))
         self.context_manager = get_context_manager()
         
         # Mode command patterns
-        self.mode_commands = {
-            "/mode": self._handle_mode_command,
-            "/modestatus": self._handle_mode_status,
-            "/context": self._handle_context_command,
-            "/switch": self._handle_quick_switch
-        }
+        self.mode_commands = {}
+        if hasattr(self, "_handle_mode_command"):
+            self.mode_commands["/mode"] = self._handle_mode_command
+        if hasattr(self, "_handle_mode_status"):
+            self.mode_commands["/modestatus"] = self._handle_mode_status
+        if hasattr(self, "_handle_context_command"):
+            self.mode_commands["/context"] = self._handle_context_command
+        if hasattr(self, "_handle_quick_switch"):
+            self.mode_commands["/switch"] = self._handle_quick_switch
 
     async def process_request(self, user_input: str) -> bool:
         """Process user request using mode-aware intelligent classification and routing.
@@ -151,7 +154,6 @@ class EnhancedRequestRouter:
             return await self._process_conversation(user_input)
 
         return True
-
     def _enrich_plan_with_classification(
         self, plan: Dict[str, Any], classification: ClassificationResult
     ) -> Dict[str, Any]:
@@ -331,3 +333,7 @@ class EnhancedRequestRouter:
             console.print("⚠️ [yellow]AI processing not available[/yellow]")
 
         return True
+
+
+# Legacy public name retained for compatibility.
+RequestRouter = EnhancedRequestRouter

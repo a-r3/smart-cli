@@ -9,14 +9,14 @@ from rich.console import Console
 console = Console()
 
 try:
-    from .mode_manager import get_mode_manager, SmartMode
-    from .context_manager import get_context_manager
-    from .mode_config_manager import get_mode_config_manager
+    from .mode_manager import get_mode_manager, SmartMode, ModeManager
+    from .context_manager import get_context_manager, SmartContextManager
+    from .mode_config_manager import get_mode_config_manager, SmartModeConfigManager as ModeConfigManager
     from .enhanced_request_router import EnhancedRequestRouter
 except ImportError:
-    from mode_manager import get_mode_manager, SmartMode
-    from context_manager import get_context_manager
-    from mode_config_manager import get_mode_config_manager
+    from mode_manager import get_mode_manager, SmartMode, ModeManager
+    from context_manager import get_context_manager, SmartContextManager
+    from mode_config_manager import get_mode_config_manager, SmartModeConfigManager as ModeConfigManager
     from enhanced_request_router import EnhancedRequestRouter
 
 class ModeIntegrationManager:
@@ -25,9 +25,9 @@ class ModeIntegrationManager:
     def __init__(self, smart_cli_instance):
         """Initialize integration manager."""
         self.smart_cli = smart_cli_instance
-        self.mode_manager = get_mode_manager(smart_cli_instance.config)
-        self.context_manager = get_context_manager()
-        self.config_manager = get_mode_config_manager(smart_cli_instance.config)
+        self.mode_manager = None
+        self.context_manager = None
+        self.config_manager = None
         
         # Enhanced router
         self.enhanced_router = None
@@ -43,8 +43,14 @@ class ModeIntegrationManager:
     async def initialize_enhanced_mode_system(self) -> bool:
         """Initialize the enhanced mode system."""
         try:
+            self.mode_manager = ModeManager(self.smart_cli)
+            self.context_manager = SmartContextManager()
+            self.config_manager = ModeConfigManager(getattr(self.smart_cli, "config", None))
+
             # Replace existing router with enhanced version
             self.enhanced_router = EnhancedRequestRouter(self.smart_cli)
+            self.enhanced_router.mode_manager = self.mode_manager
+            self.enhanced_router.context_manager = self.context_manager
             
             # Register mode change listeners
             self._register_built_in_listeners()
@@ -312,6 +318,6 @@ _integration_manager = None
 def get_mode_integration_manager(smart_cli_instance) -> ModeIntegrationManager:
     """Get global mode integration manager instance."""
     global _integration_manager
-    if _integration_manager is None:
+    if _integration_manager is None or _integration_manager.smart_cli is not smart_cli_instance:
         _integration_manager = ModeIntegrationManager(smart_cli_instance)
     return _integration_manager

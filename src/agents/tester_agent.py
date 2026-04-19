@@ -12,6 +12,8 @@ from .base_agent import BaseAgent
 class TesterAgent(BaseAgent):
     """Intelligent Testing Agent - AI-powered expert for comprehensive testing strategies."""
 
+    __test__ = False
+
     def __init__(self, ai_client=None, config_manager=None):
         super().__init__(ai_client, config_manager)
         self.agent_name = "Testing Agent"

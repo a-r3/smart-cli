@@ -29,7 +29,13 @@ class AIResponse:
 class SimpleOpenRouterClient:
     """Minimal AI client with OpenRouter and Anthropic support."""
 
-    def __init__(self, config_manager):
+    def __init__(self, config_manager=None):
+        if config_manager is None:
+            try:
+                from .config import ConfigManager
+            except ImportError:
+                from config import ConfigManager
+            config_manager = ConfigManager()
         self.config = config_manager
         self.provider = "openrouter"
         self.api_key = config_manager.get_config("openrouter_api_key")

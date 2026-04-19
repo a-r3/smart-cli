@@ -15,8 +15,13 @@ class CommandHandler:
     """Handles Smart CLI special commands and operations."""
 
     def __init__(self, config_manager=None):
-        # Removed deprecated UIManager
-        self.config_manager = config_manager
+        # Accept either a config manager or a legacy SmartCLI instance.
+        self.smart_cli = None
+        if config_manager is not None and hasattr(config_manager, "config"):
+            self.smart_cli = config_manager
+            self.config_manager = getattr(config_manager, "config", None)
+        else:
+            self.config_manager = config_manager
         self.available_commands = {
             "help": "Show available commands",
             "exit": "Exit Smart CLI",

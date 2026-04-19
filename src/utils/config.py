@@ -57,10 +57,14 @@ class ConfigManager:
         self.config_dir = config_dir or Path.home() / ".smart-cli"
         self.config_file = self.config_dir / "config.yaml"
         self.secure_config_file = self.config_dir / "secure_config.enc"
+        self.journal_file = self.config_dir / "config.journal"
+
+        self._pending_general_writes = 0
+        self._write_batch_size = 25
 
         # Ensure config directory exists
         try:
-            self.config_dir.mkdir(exist_ok=True)
+            self.config_dir.mkdir(parents=True, exist_ok=True)
         except (PermissionError, OSError) as e:
             # Log warning but continue with default config
             print(f"Warning: Could not create config directory: {e}")
@@ -75,10 +79,15 @@ class ConfigManager:
         """Initialize encryption for sensitive configuration data."""
         key_file = self.config_dir / "config.key"
 
-        if key_file.exists():
-            with open(key_file, "rb") as f:
-                key = f.read()
-        else:
+        key = None
+        try:
+            if key_file.exists():
+                with open(key_file, "rb") as f:
+                    key = f.read()
+        except (PermissionError, OSError):
+            key = None
+
+        if not key:
             # Generate new encryption key
             password = os.environ.get("SMART_CLI_MASTER_KEY", "default-key-change-me")
             salt = os.urandom(16)
@@ -90,14 +99,17 @@ class ConfigManager:
             )
             key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
 
-            # Store key securely
-            with open(key_file, "wb") as f:
-                f.write(key)
+            try:
+                with open(key_file, "wb") as f:
+                    f.write(key)
+                os.chmod(key_file, 0o600)
+            except (PermissionError, OSError):
+                pass
 
-            # Set restrictive permissions
-            os.chmod(key_file, 0o600)
-
-        self.cipher = Fernet(key)
+        try:
+            self.cipher = Fernet(key)
+        except ValueError:
+            self.cipher = Fernet(Fernet.generate_key())
 
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from files."""
@@ -121,6 +133,18 @@ class ConfigManager:
                 config.update(secure_config)
             except Exception as e:
                 print(f"Warning: Could not decrypt secure config: {e}")
+
+        if self.journal_file.exists():
+            try:
+                with open(self.journal_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        entry = json.loads(line)
+                        config[entry["key"]] = entry["value"]
+            except (OSError, json.JSONDecodeError, KeyError) as e:
+                print(f"Warning: Could not load config journal: {e}")
 
         # Load environment variables
         config.update(self._load_env_config())
@@ -204,10 +228,18 @@ class ConfigManager:
         if secure:
             self._save_secure_config()
         else:
-            self._save_config()
+            self._append_journal_entry(key, value)
+            self._pending_general_writes += 1
+            if (
+                len(self.config) < self._write_batch_size
+                or self._pending_general_writes >= self._write_batch_size
+            ):
+                self._save_config()
 
     def get_all_config(self) -> Dict[str, Any]:
         """Get all configuration."""
+        if self._pending_general_writes:
+            self._save_config()
         return self.config.copy()
 
     def _save_config(self):
@@ -226,8 +258,22 @@ class ConfigManager:
             if key not in secure_keys:
                 general_config[key] = value
 
-        with open(self.config_file, "w") as f:
-            yaml.dump(general_config, f, default_flow_style=False)
+        try:
+            with open(self.config_file, "w") as f:
+                yaml.dump(general_config, f, default_flow_style=False)
+            self._pending_general_writes = 0
+            if self.journal_file.exists():
+                self.journal_file.unlink()
+        except (PermissionError, OSError) as e:
+            print(f"Warning: Could not save config file: {e}")
+
+    def _append_journal_entry(self, key: str, value: Any):
+        """Append a small journal entry so batched writes remain durable."""
+        try:
+            with open(self.journal_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"key": key, "value": value}) + "\n")
+        except (PermissionError, OSError):
+            pass
 
     def _save_secure_config(self):
         """Save secure configuration to encrypted file."""
@@ -245,12 +291,15 @@ class ConfigManager:
                 secure_config[key] = value
 
         if secure_config:
-            encrypted_data = self.cipher.encrypt(json.dumps(secure_config).encode())
-            with open(self.secure_config_file, "wb") as f:
-                f.write(encrypted_data)
+            try:
+                encrypted_data = self.cipher.encrypt(json.dumps(secure_config).encode())
+                with open(self.secure_config_file, "wb") as f:
+                    f.write(encrypted_data)
 
-            # Set restrictive permissions
-            os.chmod(self.secure_config_file, 0o600)
+                # Set restrictive permissions
+                os.chmod(self.secure_config_file, 0o600)
+            except (PermissionError, OSError) as e:
+                print(f"Warning: Could not save secure config: {e}")
 
     def delete_config(self, key: str):
         """Delete configuration key."""

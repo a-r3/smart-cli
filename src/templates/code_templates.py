@@ -546,6 +546,23 @@ def get_db() -> Session:
     \"\"\"Get database session (for dependency injection).\"\"\"
     return SessionLocal()
 """,
+                "crud.py": """CRUD helpers for {{model_name}}.
+
+from models import {{model_name}}
+
+
+def create_{{model_name_lower}}(db, **kwargs):
+    \"\"\"Create a new {{model_name_lower}} record.\"\"\"
+    item = {{model_name}}(**kwargs)
+    db.add(item)
+    db.flush()
+    return item
+
+
+def get_{{model_name_lower}}(db, item_id: int):
+    \"\"\"Fetch one {{model_name_lower}} by id.\"\"\"
+    return db.query({{model_name}}).filter({{model_name}}.id == item_id).first()
+""",
                 "main.py": """Main application for {{project_name}}.
 
 from database import create_tables, get_db_session
@@ -605,6 +622,7 @@ from {{module_name}} import {{class_name}}
 class Test{{class_name}}:
     \"\"\"Test suite for {{class_name}} class.\"\"\"
     
+    @pytest.fixture(autouse=True)
     def setup_method(self):
         \"\"\"Setup for each test method.\"\"\"
         self.{{instance_name}} = {{class_name}}()

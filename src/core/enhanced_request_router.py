@@ -32,15 +32,18 @@ class EnhancedRequestRouter:
     def __init__(self, smart_cli_instance):
         """Initialize enhanced router with full mode support."""
         self.smart_cli = smart_cli_instance
-        self.orchestrator = smart_cli_instance.orchestrator
-        self.handlers = smart_cli_instance.handlers
-        self.command_handler = smart_cli_instance.command_handler
-        self.debug = smart_cli_instance.debug
+        self.orchestrator = getattr(smart_cli_instance, "orchestrator", None)
+        self.handlers = getattr(smart_cli_instance, "handlers", {})
+        self.command_handler = getattr(smart_cli_instance, "command_handler", None)
+        self.debug = getattr(smart_cli_instance, "debug", False)
 
         # Initialize intelligent systems
         self.classifier = get_intelligent_classifier()
-        self.mode_manager = get_mode_manager(smart_cli_instance.config)
+        self.mode_manager = get_mode_manager(
+            getattr(smart_cli_instance, "config", smart_cli_instance)
+        )
         self.context_manager = get_context_manager()
+        self.original_process_request = None
         
         # Mode command patterns
         self.mode_commands = {
@@ -49,6 +52,29 @@ class EnhancedRequestRouter:
             "/context": self._handle_context_command,
             "/switch": self._handle_quick_switch
         }
+
+    def is_mode_command(self, user_input: str) -> bool:
+        """Return whether the input is one of the enhanced mode commands."""
+        if not isinstance(user_input, str):
+            return False
+        return user_input.split(" ", 1)[0] in self.mode_commands
+
+    async def handle_mode_command(self, user_input: str):
+        """Legacy public wrapper around explicit mode command handling."""
+        if not self.mode_manager:
+            return None
+        if hasattr(self.mode_manager, "handle_mode_command"):
+            return await self.mode_manager.handle_mode_command(user_input)
+        parts = user_input.split()
+        command = parts[0]
+        handler = self.mode_commands.get(command)
+        if not handler:
+            return None
+        return await handler(parts[1:] if len(parts) > 1 else [])
+
+    def classify_request(self, user_input: str):
+        """Legacy public wrapper for request classification."""
+        return self.classifier.classify_request(user_input, self._get_enhanced_context())
 
     async def process_request(self, user_input: str) -> bool:
         """Process user request with complete mode awareness."""
@@ -68,6 +94,8 @@ class EnhancedRequestRouter:
 
         # Process based on current mode
         if current_mode == SmartMode.SMART:
+            if self.original_process_request:
+                return await self.original_process_request(user_input)
             return await self._process_with_intelligent_classification(user_input, context)
         else:
             return await self._process_in_specific_mode(user_input, current_mode, context)

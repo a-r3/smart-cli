@@ -2,6 +2,8 @@
 
 import os
 import re
+import shutil
+from pathlib import Path
 
 from .base_agent import BaseAgent
 
@@ -58,6 +60,18 @@ class ModifierAgent(BaseAgent):
                     modified_files.extend(changed_files)
                 if task_errors:
                     errors.extend(task_errors)
+            elif self._should_modify_existing_target(target):
+                success, new_files, changed_files, task_errors, task_warnings = (
+                    await self._modify_existing_file(target, description)
+                )
+                if new_files:
+                    created_files.extend(new_files)
+                if changed_files:
+                    modified_files.extend(changed_files)
+                if task_errors:
+                    errors.extend(task_errors)
+                if task_warnings:
+                    warnings.extend(task_warnings)
             else:
                 success, new_files, changed_files, task_errors = await self._generate_new_code(
                     target, description
@@ -101,6 +115,125 @@ class ModifierAgent(BaseAgent):
                 errors=errors,
                 output_data={"target": target, "exception": str(e)},
             )
+
+    def _should_modify_existing_target(self, target: str) -> bool:
+        """Return True when the request should edit an existing file in place."""
+        return bool(target) and os.path.isfile(target)
+
+    async def _modify_existing_file(
+        self, target: str, description: str
+    ) -> tuple[bool, list, list, list, list]:
+        """Modify an existing file using AI-generated replacement content."""
+        target_path = Path(target)
+        if not target_path.exists() or not target_path.is_file():
+            error_msg = f"Cannot modify - target file not found: {target}"
+            self.log_warning(error_msg)
+            return False, [], [], [error_msg], []
+
+        original_content = target_path.read_text(encoding="utf-8", errors="ignore")
+        modification_prompt = f"""
+Update the existing file below to satisfy this request:
+{description}
+
+TARGET FILE: {target_path.name}
+
+CURRENT CONTENT:
+```text
+{original_content}
+```
+
+RULES:
+1. Return the complete updated file content only.
+2. Do not include explanations.
+3. Do not include markdown fences unless they wrap only the final file content.
+4. Preserve existing functionality unless the request requires a change.
+"""
+
+        self.log_info(f"Modifying existing file using AI: {target}")
+        response = await self.ai_client.generate_response(modification_prompt)
+        updated_content = self._extract_response_content(response)
+        updated_content = self._strip_markdown_fences(updated_content)
+
+        if not updated_content.strip():
+            error_msg = f"No updated content returned for target: {target}"
+            self.log_warning(error_msg)
+            return False, [], [], [error_msg], []
+
+        if updated_content == original_content:
+            warning_msg = f"AI response produced no file changes for: {target}"
+            self.log_warning(warning_msg)
+            return True, [], [], [], [warning_msg]
+
+        backup_path = target_path.with_suffix(f"{target_path.suffix}.bak")
+        try:
+            shutil.copy2(target_path, backup_path)
+            self._validate_generated_content(target_path, updated_content)
+            target_path.write_text(updated_content, encoding="utf-8")
+        except Exception as exc:
+            self._restore_from_backup(backup_path, target_path)
+            error_msg = f"Failed to modify {target}: {exc}"
+            self.log_error(error_msg)
+            return False, [], [], [error_msg], []
+        finally:
+            if backup_path.exists():
+                backup_path.unlink()
+
+        self.log_success(f"Modified file: {target}")
+        return True, [], [str(target_path)], [], []
+
+    def _extract_response_content(self, response) -> str:
+        """Normalize AI response objects and mocks to raw text content."""
+        if response is None:
+            return ""
+        if isinstance(response, dict):
+            return (
+                response.get("content")
+                or response.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+        return getattr(response, "content", "") or ""
+
+    def _strip_markdown_fences(self, content: str) -> str:
+        """Remove a single wrapping markdown code fence if present."""
+        if not content:
+            return ""
+
+        if not content.lstrip().startswith("```"):
+            return content
+
+        lines = content.splitlines(keepends=True)
+        opening_index = next(
+            (index for index, line in enumerate(lines) if line.lstrip().startswith("```")),
+            None,
+        )
+        closing_index = next(
+            (
+                index
+                for index in range(len(lines) - 1, -1, -1)
+                if lines[index].strip() == "```"
+            ),
+            None,
+        )
+
+        if (
+            opening_index is not None
+            and closing_index is not None
+            and closing_index > opening_index
+        ):
+            return "".join(lines[opening_index + 1 : closing_index])
+
+        return content
+
+    def _validate_generated_content(self, target_path: Path, content: str) -> None:
+        """Validate generated content before it replaces the target file."""
+        if target_path.suffix == ".py":
+            compile(content, str(target_path), "exec")
+
+    def _restore_from_backup(self, backup_path: Path, target_path: Path) -> None:
+        """Restore the original file from backup after a failed modification."""
+        if backup_path.exists():
+            shutil.copy2(backup_path, target_path)
 
     async def _fix_code_errors(
         self, target: str, description: str

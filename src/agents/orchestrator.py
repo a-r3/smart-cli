@@ -29,6 +29,17 @@ class SmartCLIOrchestrator:
     """Clean orchestrator with smart task classification and adaptive pipeline."""
 
     def __init__(self, ai_client=None, config_manager=None, execution_logger=None):
+        self.smart_cli = None
+        if (
+            ai_client is not None
+            and config_manager is None
+            and execution_logger is None
+            and hasattr(ai_client, "config")
+        ):
+            self.smart_cli = ai_client
+            config_manager = getattr(ai_client, "config", None)
+            ai_client = getattr(ai_client, "ai_client", None)
+
         self.ai_client = ai_client
         self.config_manager = config_manager
         
@@ -78,7 +89,6 @@ class SmartCLIOrchestrator:
         
         # Import extension methods
         self._import_extension_methods()
-
     def _initialize_agents(self):
         """Initialize agent instances."""
         return {}  # Lazy loading when needed
@@ -820,3 +830,7 @@ class SmartCLIOrchestrator:
             "metalearning": "metalearning",
         }
         return phase_mapping.get(agent_type, agent_type)
+
+
+# Legacy public name retained for compatibility.
+Orchestrator = SmartCLIOrchestrator

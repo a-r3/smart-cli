@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock, patch
 import pytest
 
@@ -13,6 +14,7 @@ from src.core.enhanced_request_router import EnhancedRequestRouter
 from src.agents.orchestrator import SmartCLIOrchestrator
 from src.agents.analyzer_agent import AnalyzerAgent
 from src.agents.architect_agent import ArchitectAgent
+from src.agents.modifier_agent import ModifierAgent
 from src.agents.tester_agent import TesterAgent
 from src.agents.reviewer_agent import ReviewerAgent
 
@@ -223,3 +225,78 @@ class TestRepoWorkflowE2E:
 
         # output_data must be dict-like
         assert isinstance(result.output_data, dict)
+
+    def test_orchestrator_workflow_records_real_modifier_change(self, tmp_path, monkeypatch):
+        """Full workflow should record a real file modification during modifier phase."""
+        monkeypatch.chdir(tmp_path)
+
+        target_file = tmp_path / "app.py"
+        original = "def greet():\n    return 'hello'\n"
+        updated = "def greet():\n    return 'hello world'\n"
+        target_file.write_text(original, encoding="utf-8")
+
+        ai_client = Mock()
+        ai_client.generate_response = AsyncMock(
+            return_value=SimpleNamespace(content=updated)
+        )
+        orchestrator = SmartCLIOrchestrator(ai_client=ai_client, config_manager=None)
+
+        modifier_agent = ModifierAgent(ai_client=ai_client, config_manager=None)
+
+        async def delegate_stub(agent_type, target, description, action=""):
+            if agent_type == "modifier":
+                return await modifier_agent.execute(
+                    str(target_file), "update greet return value"
+                )
+
+            return SimpleNamespace(
+                success=True,
+                created_files=[],
+                modified_files=[],
+                warnings=[],
+                errors=[],
+                output_data={"agent_type": agent_type},
+            )
+
+        orchestrator.delegate_to_agent = delegate_stub
+
+        plan = {
+            "workflow_type": "repo_implementation",
+            "pipeline": ["analyzer", "architect", "modifier", "tester", "reviewer"],
+            "complexity": "medium",
+            "risk": "medium",
+            "workflow_summary": {
+                "workflow_type": "repo_implementation",
+                "title": "Implementation Workflow",
+                "stages": ["analyzer", "architect", "modifier", "tester", "reviewer"],
+                "estimated_cost": 0.05,
+                "summary_lines": [
+                    "Workflow: repo_implementation",
+                    "Pipeline: analyzer -> architect -> modifier -> tester -> reviewer",
+                    "Estimated cost: $0.050",
+                ],
+            },
+        }
+
+        success = asyncio.run(
+            orchestrator._execute_smart_pipeline(plan, "update greet implementation")
+        )
+
+        assert success is True
+        assert target_file.read_text(encoding="utf-8") == updated
+
+        modifier_results = [
+            entry
+            for entry in orchestrator.execution_logger.execution_log["agent_results"]
+            if entry["agent_type"] == "modifier"
+        ]
+        assert len(modifier_results) == 1
+        assert modifier_results[0]["modified_files"] == [str(target_file)]
+        assert modifier_results[0]["created_files"] == []
+
+        implementation_artifacts = orchestrator.artifacts["implementation"]
+        assert str(target_file) in implementation_artifacts
+        assert any(
+            artifact.endswith("artifacts/implementation/phase_manifest.json")
+            for artifact in implementation_artifacts
+        )

@@ -115,11 +115,21 @@ class SmartModeManager:
     """Advanced mode management with intelligent switching and context isolation."""
     
     def __init__(self, config_manager=None):
+        self.smart_cli = None
+        if (
+            config_manager is not None
+            and hasattr(config_manager, "current_conversation")
+        ):
+            self.smart_cli = config_manager
+            self.config_manager = getattr(config_manager, "config", None)
+        else:
+            self.config_manager = config_manager
         self.current_mode = SmartMode.SMART
         self.previous_mode: Optional[SmartMode] = None
         self.mode_history: List[tuple] = []
-        self.config_manager = config_manager
         self.memory = ModeMemory()
+        self.mode_memory: Dict[str, Any] = {}
+        self.conversation_history: List[Any] = []
         
         # Initialize mode configurations
         self.mode_configs = self._initialize_default_configs()

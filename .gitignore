@@ -135,6 +135,8 @@ Thumbs.db
 # Smart CLI specific
 cache.db
 cache/
+.smart/
+.smart_cli_memory.json
 .smart-cli/
 smart-cli-venv/
 logs/

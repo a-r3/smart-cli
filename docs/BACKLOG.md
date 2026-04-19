@@ -12,15 +12,13 @@ Rules for using it:
 ## Current Focus
 
 Current milestone:
-- Phase 6: Workflow Differentiation
+- Phase 9: Agent Capability Expansion
 
 Current next milestone after that:
-- Phase 7: Agents and Orchestration hardening
+- P9-2: Add parallel agent execution
 
 Current execution window:
-- Window A: lock real execution contracts across all agents
-- Window B: make one repo workflow demonstrably reliable end-to-end
-- Window C: add observability and release discipline around that workflow
+- Window E: expand real agent execution beyond analysis and review
 
 ## P0: Product Truth Alignment
 
@@ -961,20 +959,32 @@ Implementation files:
 
 ### Status
 - Owner: Codex
-- Started:
+- Started: 2026-04-19
 - Target: execution window E
-- State: not started
+- State: done
 
 ### Notes
-- ModifierAgent currently has only fallback (no AI path)
-- Real path would implement intelligent code modification
-- Should follow same contract as ReviewerAgent: read-only on success, truthful about changes
-- This expands workflow from analyze→plan→test to analyze→plan→modify→test
+- Added a real existing-file execution path to `ModifierAgent`.
+- The real path now:
+- reads the target file
+- requests complete replacement content from the AI client
+- creates a backup before applying changes
+- validates generated Python before write
+- restores the original file on failure
+- reports `modified_files` only when the file actually changed
+- Added focused tests for:
+- successful in-place modification
+- no-op responses that must not be reported as file changes
+- rollback on invalid generated Python
+- Added an integration workflow test covering:
+- `Analyzer → Architect → Modifier → Tester → Reviewer`
+- real file modification during modifier phase
+- truthful execution log reporting of the modified file
 
 ### Validation
 - `pytest tests/test_modifier_real_path.py --tb=short -q`
-- Integration test: workflow that includes modification phase
-- Verify modified files are correctly reported
+- `pytest tests/test_repo_workflow_e2e.py -q`
+- Verify modified files are correctly reported in execution logs
 
 ### Problem
 - Workflow is analyze-only or review-only; no modification capability
@@ -988,14 +998,15 @@ Implementation files:
 - Add integration test with full workflow
 
 ### Acceptance criteria
-- ModifierAgent has working real path with AI
-- Modified files are correctly tracked
-- Changes are rolled back on error
-- Full workflow pipeline works: analyze → modify → test → review
+- ✅ ModifierAgent has working real path with AI
+- ✅ Modified files are correctly tracked
+- ✅ Changes are rolled back on error
+- ✅ Full workflow pipeline works with modification phase and truthful logging
 
 ### Suggested files
 - `src/agents/modifier_agent.py`
 - `tests/test_modifier_real_path.py`
+- `tests/test_repo_workflow_e2e.py`
 
 ---
 

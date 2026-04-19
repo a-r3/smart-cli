@@ -163,3 +163,7 @@ Format as numbered list:
             if self.ui_manager:
                 self.ui_manager.display_error("Command suggestion failed", str(e))
             return []
+
+
+# Legacy public name retained for compatibility.
+SimpleTerminal = SimpleTerminalManager

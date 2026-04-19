@@ -123,6 +123,7 @@ markers = [
     "security: marks tests as security tests",
     "benchmark: marks tests as benchmarks",
     "unit: marks tests as unit tests",
+    "asyncio: marks async tests",
 ]
 filterwarnings = [
     "ignore::UserWarning",
