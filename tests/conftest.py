@@ -1,6 +1,7 @@
 """Test configuration and fixtures for Smart CLI."""
 
 import inspect
+import os
 import pytest
 from unittest.mock import Mock, AsyncMock
 from pathlib import Path
@@ -11,6 +12,14 @@ from typer.testing import CliRunner
 from src.cli import app
 from src.utils.config import ConfigManager
 from src.core.budget_profiles import UsageProfile, BudgetProfile, get_profile_manager
+
+
+@pytest.fixture(autouse=True)
+def set_master_key_env():
+    """Set SMART_CLI_MASTER_KEY for all tests (required by ConfigManager)."""
+    os.environ["SMART_CLI_MASTER_KEY"] = "test-master-key-for-unit-tests"
+    yield
+    os.environ.pop("SMART_CLI_MASTER_KEY", None)
 
 
 @pytest.fixture

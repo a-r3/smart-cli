@@ -426,23 +426,23 @@ class TestHybridCacheWithRedis:
     @pytest.mark.asyncio
     async def test_redis_cache_layer(self, mock_config_with_redis, mock_redis_client):
         """Test Redis cache layer functionality."""
-        import pickle
+        import json
         
         with patch('src.utils.cache.redis') as mock_redis_module:
             mock_redis_module.from_url.return_value = mock_redis_client
             
             hybrid_cache = HybridCache(mock_config_with_redis)
             
-            # Mock Redis get to return pickled data
+            # Mock Redis get to return JSON data
             test_data = "redis_cached_value"
-            mock_redis_client.get.return_value = pickle.dumps(test_data)
+            mock_redis_client.get.return_value = json.dumps(test_data)
             
             # Clear memory cache to force Redis lookup
             hybrid_cache.memory_cache.clear()
             
             result = await hybrid_cache.get("redis_test")
             
-            # Should call Redis and return unpickled data
+            # Should call Redis and return deserialized data
             mock_redis_client.get.assert_called()
             assert result == test_data
 
