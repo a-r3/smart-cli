@@ -311,17 +311,24 @@ class EnhancedRequestRouter:
 
     async def _process_conversation(self, user_input: str) -> bool:
         """Process general AI conversation."""
-        if hasattr(self.smart_cli, "_process_ai_request"):
-            try:
-                await asyncio.wait_for(
-                    self.smart_cli._process_ai_request(user_input), timeout=30.0
-                )
-            except asyncio.TimeoutError:
-                console.print("⏰ [yellow]AI request timed out[/yellow]")
-            except Exception as e:
-                console.print(f"❌ [red]AI processing error: {str(e)}[/red]")
-        else:
-            console.print("⚠️ [yellow]AI processing not available[/yellow]")
+        ai_client = getattr(self.smart_cli, "ai_client", None)
+        session_manager = getattr(self.smart_cli, "session_manager", None)
+        if not ai_client:
+            console.print("❌ [red]AI client not available[/red]")
+            return True
+
+        try:
+            response = await asyncio.wait_for(
+                ai_client.generate_response(user_input), timeout=30.0
+            )
+            console.print(f"🤖 {response.content}")
+            if session_manager:
+                session_manager.add_to_history("user", user_input)
+                session_manager.add_to_history("assistant", response.content)
+        except asyncio.TimeoutError:
+            console.print("⏰ [yellow]AI request timed out[/yellow]")
+        except Exception as e:
+            console.print(f"❌ [red]AI processing error: {str(e)}[/red]")
 
         return True
 

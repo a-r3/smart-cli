@@ -303,52 +303,6 @@ class SmartCLI:
         finally:
             await self.shutdown()
 
-    # LEGACY METHODS - kept for compatibility, but replaced by RequestRouter
-
-    async def _get_user_input(self):
-        """Get user input with error handling."""
-        try:
-            # Contextual prompt with caching
-            prompt_text = await self._get_contextual_prompt()
-            console.print(prompt_text, end="")
-            return input().strip()
-        except EOFError:
-            console.print("\n👋 EOF detected. Goodbye!", style="yellow")
-            return None
-        except KeyboardInterrupt:
-            console.print("\n👋 Goodbye!", style="yellow")
-            return None
-        except Exception as e:
-            console.print(f"⚠️ [yellow]Input error: {str(e)}[/yellow]")
-            return ""
-
-    # Legacy fallback method - replaced by RequestRouter
-    async def _handle_ai_fallback(self, user_input: str):
-        """Legacy method - now handled by RequestRouter._process_conversation"""
-        return await self._process_ai_request(user_input)
-
-    # Legacy orchestrator methods - now handled by RequestRouter
-    # Kept for backward compatibility if needed
-
-    async def _process_ai_request(self, user_input: str):
-        """Process AI request with proper error handling."""
-        if not self.ai_client:
-            console.print("❌ [red]AI client not available[/red]")
-            return
-
-        try:
-            response = await self.ai_client.generate_response(user_input)
-
-            # Simple AI response display
-            console.print(f"🤖 {response.content}")
-
-            # Add to conversation history
-            self.session_manager.add_to_history("user", user_input)
-            self.session_manager.add_to_history("assistant", response.content)
-
-        except Exception as e:
-            console.print(f"❌ [red]AI request failed: {str(e)}[/red]")
-
     def handle_identity_questions(self, user_input: str) -> bool:
         """Handle Smart CLI identity and self-awareness questions."""
         identity_keywords = [
