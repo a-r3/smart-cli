@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -227,13 +228,14 @@ class ConfigManager:
         return self.config.get(key, default)
 
     def set_config(self, key: str, value: Any, secure: bool = False):
-        """Set configuration value."""
+        """Set configuration value with audit journal entry."""
+        old_value = self.config.get(key)
         self.config[key] = value
 
         if secure:
             self._save_secure_config()
         else:
-            self._append_journal_entry(key, value)
+            self._append_journal_entry(key, value, old_value, action="set")
             self._pending_general_writes += 1
             if (
                 len(self.config) < self._write_batch_size
@@ -267,18 +269,46 @@ class ConfigManager:
             with open(self.config_file, "w") as f:
                 yaml.dump(general_config, f, default_flow_style=False)
             self._pending_general_writes = 0
-            if self.journal_file.exists():
-                self.journal_file.unlink()
+            # Journal file is preserved as immutable audit trail; not deleted here.
         except (PermissionError, OSError) as e:
             print(f"Warning: Could not save config file: {e}")
 
-    def _append_journal_entry(self, key: str, value: Any):
-        """Append a small journal entry so batched writes remain durable."""
+    def _append_journal_entry(
+        self, key: str, value: Any, old_value: Any = None, action: str = "set"
+    ):
+        """Append an audit journal entry for configuration changes.
+
+        Records timestamp, key, old value, new value and action type
+        for immutable audit trail.
+        """
         try:
+            entry = {
+                "timestamp": datetime.now().isoformat(),
+                "action": action,
+                "key": key,
+                "old_value": old_value,
+                "new_value": value,
+            }
             with open(self.journal_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps({"key": key, "value": value}) + "\n")
+                f.write(json.dumps(entry) + "\n")
         except (PermissionError, OSError):
             pass
+
+    def get_journal_entries(self) -> list[dict]:
+        """Read all audit journal entries."""
+        entries = []
+        try:
+            with open(self.journal_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except (FileNotFoundError, PermissionError, OSError):
+            pass
+        return entries
 
     def _save_secure_config(self):
         """Save secure configuration to encrypted file."""
@@ -307,9 +337,11 @@ class ConfigManager:
                 print(f"Warning: Could not save secure config: {e}")
 
     def delete_config(self, key: str):
-        """Delete configuration key."""
+        """Delete configuration key with audit journal entry."""
         if key in self.config:
+            old_value = self.config[key]
             del self.config[key]
+            self._append_journal_entry(key, None, old_value, action="delete")
             self._save_config()
             self._save_secure_config()
 
