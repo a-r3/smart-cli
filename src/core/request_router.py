@@ -8,22 +8,13 @@ from rich.console import Console
 
 console = Console()
 
-try:
-    from .intelligent_request_classifier import (
-        ClassificationResult,
-        RequestType,
-        get_intelligent_classifier,
-    )
-    from .mode_manager import get_mode_manager, SmartMode
-    from .context_manager import get_context_manager
-except ImportError:
-    from intelligent_request_classifier import (
-        ClassificationResult,
-        RequestType,
-        get_intelligent_classifier,
-    )
-    from mode_manager import get_mode_manager, SmartMode
-    from context_manager import get_context_manager
+from .intelligent_request_classifier import (
+    ClassificationResult,
+    RequestType,
+    get_intelligent_classifier,
+)
+from .mode_manager import get_mode_manager, SmartMode
+from .context_manager import get_context_manager
 
 
 class EnhancedRequestRouter:

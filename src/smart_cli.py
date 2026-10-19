@@ -7,64 +7,34 @@ from rich.console import Console
 from rich.panel import Panel
 
 # Core modules
-try:
-    # Agents
-    from .agents.orchestrator import SmartCLIOrchestrator
-    from .core.command_handler import CommandHandler
-    from .core.file_manager import FileManager
-    from .core.identity import SmartIdentity
-    from .core.session_manager import SessionManager
+# Agents
+from .agents.orchestrator import SmartCLIOrchestrator
+from .core.command_handler import CommandHandler
+from .core.file_manager import FileManager
+from .core.identity import SmartIdentity
+from .core.session_manager import SessionManager
 
-    # UIManager deprecated - using terminal_ui instead
-    from .core.simple_git import SimpleGitManager
-    from .core.simple_project_generator import SimpleProjectGenerator
-    from .core.simple_terminal import SimpleTerminalManager
+# UIManager deprecated - using terminal_ui instead
+from .core.simple_git import SimpleGitManager
+from .core.simple_project_generator import SimpleProjectGenerator
+from .core.simple_terminal import SimpleTerminalManager
 
-    # Handlers
-    from .handlers import (
-        CostHandler,
-        FileHandler,
-        GitHandler,
-        GitHubHandler,
-        ImplementationHandler,
-        ProjectHandler,
-        TerminalHandler,
-    )
+# Handlers
+from .handlers import (
+    CostHandler,
+    FileHandler,
+    GitHandler,
+    GitHubHandler,
+    ImplementationHandler,
+    ProjectHandler,
+    TerminalHandler,
+)
 
-    # Integrations
-    from .integrations.github_manager import GitHubManager
+# Integrations
+from .integrations.github_manager import GitHubManager
 
-    # Essential utilities only
-    from .utils import ConfigManager, OpenRouterClient
-except ImportError:
-    # Agents
-    from agents.orchestrator import SmartCLIOrchestrator
-    from core.command_handler import CommandHandler
-    from core.file_manager import FileManager
-    from core.identity import SmartIdentity
-    from core.session_manager import SessionManager
-
-    # UIManager deprecated - using terminal_ui instead
-    from core.simple_git import SimpleGitManager
-    from core.simple_project_generator import SimpleProjectGenerator
-    from core.simple_terminal import SimpleTerminalManager
-
-    # Handlers
-    from handlers import (
-        CostHandler,
-        FileHandler,
-        GitHandler,
-        GitHubHandler,
-        ImplementationHandler,
-        ProjectHandler,
-        TerminalHandler,
-    )
-
-    # Integrations
-    from integrations.github_manager import GitHubManager
-
-    # Essential utilities only
-    from utils import ConfigManager, OpenRouterClient
+# Essential utilities only
+from .utils import ConfigManager, OpenRouterClient
 
 console = Console()
 
