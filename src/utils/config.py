@@ -46,10 +46,6 @@ def load_env_file_manual():
     return False
 
 
-# Load .env file at module import
-load_env_file_manual()
-
-
 class ConfigManager:
     """Manages Smart CLI configuration with secure storage."""
 
@@ -61,6 +57,10 @@ class ConfigManager:
 
         self._pending_general_writes = 0
         self._write_batch_size = 25
+
+        # Load .env file lazily (only when ConfigManager is instantiated,
+        # not at module import time)
+        load_env_file_manual()
 
         # Ensure config directory exists
         try:
