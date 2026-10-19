@@ -27,6 +27,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         pip install pytest pytest-cov pytest-asyncio
+        pip install bandit flake8 mypy pre-commit
     
     - name: Add project to Python path
       run: echo "PYTHONPATH=${GITHUB_WORKSPACE}:${PYTHONPATH}" >> $GITHUB_ENV
@@ -38,6 +39,27 @@ jobs:
           --cov-report=xml \
           --cov-report=term-missing \
           --tb=short
+
+    - name: Run bandit security scan
+      if: matrix.python-version == '3.9'
+      run: |
+        bandit -r src/ -f json -o bandit-report.json || true
+        bandit -r src/ || true
+
+    - name: Run flake8 linting
+      if: matrix.python-version == '3.9'
+      run: |
+        flake8 src/ --max-line-length=100 --extend-ignore=E203,W503 || true
+
+    - name: Run mypy type check
+      if: matrix.python-version == '3.9'
+      run: |
+        mypy src/ --ignore-missing-imports || true
+
+    - name: Run pre-commit hooks
+      if: matrix.python-version == '3.9'
+      run: |
+        pre-commit run --all-files || true
 
     - name: Upload coverage to Codecov (tokenless)
       if: matrix.python-version == '3.9'  
