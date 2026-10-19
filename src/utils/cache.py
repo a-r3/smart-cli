@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import pickle
 import sqlite3
 import tempfile
 from collections import OrderedDict
@@ -145,7 +144,7 @@ class SQLiteCache:
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         """Store a serialized cache value."""
         try:
-            serialized = pickle.dumps(value)
+            serialized = json.dumps(value).encode("utf-8")
         except Exception:
             return
 
@@ -189,7 +188,7 @@ class SQLiteCache:
             )
 
         try:
-            return pickle.loads(value_blob)
+            return json.loads(value_blob.decode("utf-8"))
         except Exception:
             return None
 
@@ -244,7 +243,7 @@ class FastSQLiteCache:
 
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
         try:
-            pickle.dumps(value)
+            json.dumps(value)
         except Exception:
             return
         expires_at = datetime.now() + timedelta(seconds=ttl or 365 * 24 * 3600)
@@ -332,7 +331,7 @@ class HybridCache:
                 self.redis_client.setex(
                     namespaced_key,
                     ttl or self.memory_cache.default_ttl,
-                    pickle.dumps(value),
+                    json.dumps(value),
                 )
             except Exception:
                 pass
@@ -350,7 +349,7 @@ class HybridCache:
             try:  # pragma: no cover - exercised via mocks
                 payload = self.redis_client.get(namespaced_key)
                 if payload is not None:
-                    value = pickle.loads(payload)
+                    value = json.loads(payload)
                     self.memory_cache.set(namespaced_key, value)
                     return _AwaitableValue(value)
             except Exception:
