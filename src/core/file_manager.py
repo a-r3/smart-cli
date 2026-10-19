@@ -9,7 +9,11 @@ console = Console()
 
 
 class FileManager:
-    """Handles all file operations for Smart CLI."""
+    """Handles all file operations for Smart CLI.
+
+    Operates in read-only mode by default. Use set_write_mode(True) to
+    enable file writes after explicit user confirmation.
+    """
 
     def __init__(self):
         try:
@@ -17,6 +21,20 @@ class FileManager:
         except (FileNotFoundError, OSError):
             # Fallback to home directory if current directory doesn't exist
             self.current_directory = os.path.expanduser("~")
+
+        # Read-only by default: no file writes unless explicitly enabled
+        self.read_only = True
+
+    def set_write_mode(self, enabled: bool) -> None:
+        """Enable or disable file write operations."""
+        self.read_only = not enabled
+
+    def _is_path_safe(self, file_path: str) -> bool:
+        """Block path traversal attempts (.. components)."""
+        normalized = os.path.normpath(file_path)
+        if ".." in normalized.split(os.sep):
+            return False
+        return True
 
     async def read_file_content(self, file_path: str, show_full: bool = False):
         """Read and display file content with smart formatting."""
@@ -98,7 +116,20 @@ class FileManager:
         return filename  # Return original if not found
 
     async def write_file_content(self, file_path: str, content: str):
-        """Write content to file."""
+        """Write content to file. Blocked in read-only mode."""
+        if self.read_only:
+            console.print(
+                "❌ [red]Write blocked: FileManager is in read-only mode. "
+                "Enable write mode with --write flag.[/red]",
+                style="red",
+            )
+            return
+        if not self._is_path_safe(file_path):
+            console.print(
+                f"❌ [red]Path traversal blocked: {file_path}[/red]",
+                style="red",
+            )
+            return
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)

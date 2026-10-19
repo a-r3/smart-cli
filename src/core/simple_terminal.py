@@ -18,7 +18,19 @@ class CommandResult:
 
 
 class SimpleTerminalManager:
-    """Minimal terminal command execution."""
+    """Minimal terminal command execution.
+
+    Operates in read-only mode by default. Only read-safe commands from
+    the allowlist are permitted. Use set_write_mode(True) to enable
+    write/destructive commands after explicit user confirmation.
+    """
+
+    # Commands safe to run in read-only mode (no filesystem writes)
+    READ_ONLY_ALLOWLIST = {
+        "ls", "pwd", "cat", "head", "tail", "grep", "find", "which",
+        "file", "wc", "sort", "uniq", "diff", "git", "echo", "ps",
+        "df", "du", "free", "uptime", "whoami", "id", "date",
+    }
 
     def __init__(self):
         self.ui_manager = None  # Will be set by orchestrator
@@ -27,8 +39,31 @@ class SimpleTerminalManager:
         except (FileNotFoundError, OSError):
             self.current_directory = os.path.expanduser("~")
 
+        # Read-only by default: no destructive/write commands unless enabled
+        self.read_only = True
+
+    def set_write_mode(self, enabled: bool) -> None:
+        """Enable or disable write/destructive terminal commands."""
+        self.read_only = not enabled
+
+    def _is_command_allowed(self, command: str) -> bool:
+        """Check if a command is allowed in the current mode."""
+        base_cmd = command.strip().split()[0] if command.strip() else ""
+        if self.read_only:
+            return base_cmd in self.READ_ONLY_ALLOWLIST
+        return True
+
     async def execute_command(self, command: str) -> CommandResult:
-        """Execute shell command safely."""
+        """Execute shell command safely. Blocked in read-only mode unless allowlisted."""
+
+        if not self._is_command_allowed(command):
+            if self.ui_manager:
+                self.ui_manager.display_error(
+                    "⚠️ Command blocked in read-only mode", command
+                )
+            return CommandResult(
+                command, False, "", "Command blocked in read-only mode"
+            )
 
         # Basic safety check for dangerous commands
         dangerous = ["rm -rf", "sudo rm", "format", "mkfs", "dd if="]
