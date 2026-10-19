@@ -89,7 +89,12 @@ class ConfigManager:
 
         if not key:
             # Generate new encryption key
-            password = os.environ.get("SMART_CLI_MASTER_KEY", "default-key-change-me")
+            password = os.environ.get("SMART_CLI_MASTER_KEY")
+            if not password:
+                raise ValueError(
+                    "SMART_CLI_MASTER_KEY environment variable is required. "
+                    "Set it before running Smart CLI (e.g. export SMART_CLI_MASTER_KEY=your-secret-key)."
+                )
             salt = os.urandom(16)
             kdf = PBKDF2HMAC(
                 algorithm=hashes.SHA256(),
